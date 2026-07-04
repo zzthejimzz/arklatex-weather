@@ -28,7 +28,11 @@ npm run dev          # open http://localhost:5173/
   Falls back to the old CARTO raster stack (CSS grey filter) if the style
   fetch fails. Stack: base → SPC Day-1 categorical outlook (ambient) →
   **animated NEXRAD loop** (30-min window, 7 frames, always in motion, cache
-  re-busted every 5 min) → white state borders → SPC mesoscale discussions
+  re-busted every 5 min; tiles decode to true dBZ via the baked IEM lookup
+  table — `npm run build-radar-lut` — get smoothed in data space with
+  neighbor-tile padding, and repaint through a broadcast palette with
+  intensity-scaled alpha; frames crossfade — see `src/map/radar-render.js`,
+  test with `/test-radar.html?v=lat,lon,zoom`) → white state borders → SPC mesoscale discussions
   (dashed cyan, via IEM) → watches (dashed) → warning polygons → curated
   city/town labels (own the overview zoom band < 8.45; GL labels take over
   when zoomed in).

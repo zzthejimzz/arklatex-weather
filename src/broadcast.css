@@ -61,8 +61,8 @@ html, body {
 }
 
 /* Radar frames render normally over the grey base (no screen blend — that
-   washes out over mid-grey land). Saturation/blur are set inline by
-   map/radar-loop.js and scale with zoom. */
+   washes out over mid-grey land). Colors/smoothing happen in the tile
+   pipeline itself (map/radar-render.js) — no pane-level CSS filters. */
 
 /* ─── Banner ────────────────────────────────────────────────────────── */
 #banner {

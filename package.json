@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build-geo": "node scripts/build-geo.js"
+    "build-geo": "node scripts/build-geo.js",
+    "build-radar-lut": "node scripts/build-radar-lut.js"
   },
   "dependencies": {
     "@maplibre/maplibre-gl-leaflet": "^0.1.3",
