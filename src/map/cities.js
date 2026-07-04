@@ -23,12 +23,13 @@ export const PLACES = [
   ['Greenville',      33.410, -91.062, 0],
   ['Alexandria',      31.311, -92.445, 0],
 
+  // Within a tier, order = priority when labels collide at wide zooms.
   ['Shreveport',      32.525, -93.750, 1],
   ['Texarkana',       33.425, -94.048, 1],
-  ['Longview',        32.500, -94.740, 1],
   ['Tyler',           32.351, -95.301, 1],
   ['Monroe',          32.510, -92.119, 1],
   ['Lufkin',          31.338, -94.729, 1],
+  ['Longview',        32.500, -94.740, 1],
 
   ['Marshall',        32.545, -94.367, 2],
   ['Nacogdoches',     31.603, -94.655, 2],
@@ -76,10 +77,21 @@ export const PLACES = [
 // so curated labels cut off there to avoid doubling.
 const TIER_ZOOM = { 0: [0, 8.45], 1: [0, 8.45], 2: [6.5, 8.45], 3: [7.6, 8.45] };
 
+// Estimated on-screen label box (px): dot + gap + text at the tier's font
+// size. Used only for collision math — a few px off is fine.
+const TIER_CHAR_W = { 0: 6.6, 1: 8.2, 2: 7.2, 3: 6.1 };
+const LABEL_H = 22;
+const GAP = 4; // required breathing room between boxes
+
 export function addCityLabels(map) {
-  const markers = PLACES.filter(([, , , tier]) => TIER_ZOOM[tier]).map(
-    ([name, lat, lon, tier]) => ({
+  const entries = PLACES.filter(([, , , tier]) => TIER_ZOOM[tier]).map(
+    ([name, lat, lon, tier], idx) => ({
+      name,
+      lat,
+      lon,
       tier,
+      idx,
+      w: name.length * TIER_CHAR_W[tier] + 18,
       marker: L.marker([lat, lon], {
         pane: 'cities',
         interactive: false,
@@ -93,13 +105,34 @@ export function addCityLabels(map) {
     }),
   );
 
+  // Higher tiers win collisions; within a tier, PLACES order wins. In-region
+  // majors (1) beat out-of-region anchors (0) — the region is the story.
+  const PRIORITY = { 1: 0, 2: 1, 3: 2, 0: 3 };
+  const byPriority = entries
+    .slice()
+    .sort((a, b) => PRIORITY[a.tier] - PRIORITY[b.tier] || a.idx - b.idx);
+
   const sync = () => {
     const z = map.getZoom();
-    for (const { tier, marker } of markers) {
-      const [lo, hi] = TIER_ZOOM[tier];
-      const show = z >= lo && z < hi;
-      if (show && !map.hasLayer(marker)) marker.addTo(map);
-      else if (!show && map.hasLayer(marker)) marker.remove();
+    // Greedy collision cull: place labels in priority order, hide any whose
+    // box overlaps an already-placed one. Overlap geometry only depends on
+    // zoom (relative pixel distances are pan-invariant), so zoomend suffices.
+    const placed = [];
+    for (const e of byPriority) {
+      const [lo, hi] = TIER_ZOOM[e.tier];
+      let show = z >= lo && z < hi;
+      if (show) {
+        const p = map.latLngToContainerPoint([e.lat, e.lon]);
+        const box = { x1: p.x, y1: p.y - LABEL_H, x2: p.x + e.w, y2: p.y };
+        show = !placed.some(
+          (r) =>
+            r.x1 < box.x2 + GAP && box.x1 < r.x2 + GAP &&
+            r.y1 < box.y2 + GAP && box.y1 < r.y2 + GAP,
+        );
+        if (show) placed.push(box);
+      }
+      if (show && !map.hasLayer(e.marker)) e.marker.addTo(map);
+      else if (!show && map.hasLayer(e.marker)) e.marker.remove();
     }
   };
   map.on('zoomend', sync);

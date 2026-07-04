@@ -92,7 +92,15 @@ async function boot() {
     status => renderChip(status),
   );
 
-  director.boot();
+  // Dev-only: ?cam=lat,lon,zoom parks the camera and skips the director —
+  // for checking framing / label collision at arbitrary zooms.
+  const cam = new URLSearchParams(location.search).get('cam');
+  if (cam) {
+    const [lat, lon, z] = cam.split(',').map(Number);
+    map.setView([lat, lon], z);
+  } else {
+    director.boot();
+  }
 }
 
 boot();
