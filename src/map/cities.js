@@ -1,13 +1,28 @@
 // Curated ArkLaTex place list. Two jobs:
-//   1. Render town labels with zoom tiers (tier 2 mid zoom, tier 3 warning
-//      zoom) so places near a warning are readable on air. Tier 1 majors are
-//      NOT rendered — CARTO's label tiles already show them at every zoom we
-//      use, and doubling looks broken.
+//   1. Own ALL place labels in the overview zoom band (< Leaflet 8.45) —
+//      tier 0 out-of-region anchors, tier 1 in-region majors, tiers 2/3
+//      progressively smaller towns. The vector basemap's GL labels take over
+//      from 8.45 (LABEL_MINZOOM in vector-basemap.js); GL can't collision-
+//      avoid DOM markers, so the two must never share a zoom band. State
+//      capitals (Little Rock, Jackson, …) are GL-labeled at every zoom —
+//      never add them here.
 //   2. Name things ("Tracking showers near Marshall") via nearestPlace().
 import L from 'leaflet';
 
 export const PLACES = [
   // [name, lat, lon, tier]
+  // tier 0 — out-of-region context anchors (overview framing only).
+  // Excluded from nearestPlace so tours never say "near Dallas".
+  ['Dallas',          32.777, -96.797, 0],
+  ['Fort Worth',      32.755, -97.331, 0],
+  ['Waco',            31.549, -97.147, 0],
+  ['Sherman',         33.635, -96.609, 0],
+  ['Ardmore',         34.174, -97.144, 0],
+  ['Hot Springs',     34.504, -93.055, 0],
+  ['Pine Bluff',      34.228, -92.003, 0],
+  ['Greenville',      33.410, -91.062, 0],
+  ['Alexandria',      31.311, -92.445, 0],
+
   ['Shreveport',      32.525, -93.750, 1],
   ['Texarkana',       33.425, -94.048, 1],
   ['Longview',        32.500, -94.740, 1],
@@ -55,10 +70,11 @@ export const PLACES = [
   ['Vivian',          32.871, -93.987, 3],
 ];
 
-// Curated labels only fill the zoom band where CARTO's label tiles are sparse
-// (overview). From fractional zoom ~8.5 CARTO renders z9 tiles which label
-// most towns — curated labels there just double them, so they cut off at 8.45.
-const TIER_ZOOM = { 2: [6.5, 8.45], 3: [7.6, 8.45] }; // tier 1 never rendered
+// Curated labels only fill the overview zoom band. From Leaflet 8.45 the
+// vector basemap's city/town/village labels take over (LABEL_MINZOOM in
+// map/vector-basemap.js is pinned to GL 7.45 = Leaflet 8.45 — keep in sync),
+// so curated labels cut off there to avoid doubling.
+const TIER_ZOOM = { 0: [0, 8.45], 1: [0, 8.45], 2: [6.5, 8.45], 3: [7.6, 8.45] };
 
 export function addCityLabels(map) {
   const markers = PLACES.filter(([, , , tier]) => TIER_ZOOM[tier]).map(
@@ -93,7 +109,8 @@ export function addCityLabels(map) {
 export function nearestPlace(lat, lon) {
   let best = null;
   let bestD = Infinity;
-  for (const [name, plat, plon] of PLACES) {
+  for (const [name, plat, plon, tier] of PLACES) {
+    if (tier === 0) continue; // anchors are outside the region
     const d = (plat - lat) ** 2 + (plon - lon) ** 2;
     if (d < bestD) {
       bestD = d;

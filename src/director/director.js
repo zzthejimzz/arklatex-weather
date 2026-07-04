@@ -16,7 +16,7 @@ const OVERVIEW_DWELL_MS = 30_000;
 const SOLO_TOUR_DWELL_MS = 45_000; // lone warning holds the shot longer
 const SOLO_OVERVIEW_DWELL_MS = 15_000;
 const FLY_MS = 2_400;
-const TOUR_MAX_ZOOM = 11.3; // CARTO labels road names from ~z11 — streets read on air
+const TOUR_MAX_ZOOM = 12.4; // vector road names populate from GL z11 (Leaflet 12) — streets read on air
 const WATCH_MAX_ZOOM = 8.5;
 const POI_MAX_ZOOM = 9.4;
 

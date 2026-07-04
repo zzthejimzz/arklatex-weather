@@ -1,14 +1,15 @@
-// Broadcast map: grey "Pivotal-style" basemap (same recipe as the Website
-// outlooks map) + label/state/data panes. All user interaction is disabled —
-// a stray mouse during capture must not move the camera.
+// Broadcast map: grey "Pivotal-style" basemap + label/state/data panes. All
+// user interaction is disabled — a stray mouse during capture must not move
+// the camera.
 //
-// CARTO dark tiles are remapped to grey by the `.grey-basemap` CSS filter in
-// broadcast.css (land ~#595959, water ~#191919 — derived from actual tile
-// pixel values; don't change without re-deriving). The filter hits only the
-// default tile pane; labels/radar live in custom panes so they stay unfiltered.
+// The base is OpenFreeMap vector tiles rendered by MapLibre GL (see
+// map/vector-basemap.js): grey land/water plus a labels-only GL layer in the
+// `labels` pane so names stay above radar. If the style fetch fails the map
+// falls back to the old CARTO raster stack (grey CSS filter + label tiles) —
+// a 24/7 stream can't sit on a blank map.
 //
 // Pane stack (bottom → top):
-//   tilePane 200      CARTO dark_nolabels (grey-filtered)
+//   tilePane 200      vector base, grey (fallback: CARTO dark, grey-filtered)
 //   overlayPane 400   SPC outlook fills
 //   radar 450         NEXRAD loop frames (normal blend over the grey base)
 //   states 455        white state borders
@@ -16,11 +17,13 @@
 //   watches 460       watch outlines
 //   warnings 465      warning polygons
 //   cities 640        curated city labels
-//   labels 650        CARTO dark_only_labels
+//   labels 650        vector labels (fallback: CARTO dark_only_labels)
 import L from 'leaflet';
+import { addVectorBasemap } from './vector-basemap.js';
 
-const CARTO_ATTR = '&copy; OSM &copy; CARTO &middot; Radar: Iowa State Mesonet / NEXRAD';
-const MAX_ZOOM = 14; // deep warning zoom — CARTO labels carry road names from ~z11
+const ATTR =
+  '&copy; OpenStreetMap &middot; OpenFreeMap &middot; Radar: Iowa State Mesonet / NEXRAD';
+const MAX_ZOOM = 14;
 
 const PANES = {
   radar: 450,
@@ -43,8 +46,9 @@ export function createBroadcastMap(el, bbox) {
     keyboard: false,
     touchZoom: false,
     inertia: false,
+    attributionControl: true,
   });
-  map.getContainer().classList.add('grey-basemap');
+  map.attributionControl.addAttribution(ATTR);
 
   for (const [name, z] of Object.entries(PANES)) {
     map.createPane(name);
@@ -53,16 +57,28 @@ export function createBroadcastMap(el, bbox) {
     pane.style.pointerEvents = 'none';
   }
 
+  map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
+
+  addVectorBasemap(map).catch((err) => {
+    console.warn('[basemap] vector style unavailable, falling back to CARTO raster:', err);
+    addRasterFallback(map);
+  });
+
+  return map;
+}
+
+// Legacy CARTO raster stack. Non-commercial tiles — acceptable only as an
+// emergency fallback. The grey look comes from the `.grey-basemap` CSS filter
+// in broadcast.css; labels swap to @2x retina tiles at z8.5 so text renders
+// twice as large when the camera is deep in a warning.
+function addRasterFallback(map) {
+  map.getContainer().classList.add('grey-basemap');
+
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-    attribution: CARTO_ATTR,
     subdomains: 'abcd',
     maxZoom: MAX_ZOOM,
   }).addTo(map);
 
-  // Labels come in two layers that swap at z8.5: normal tiles for overview,
-  // then @2x retina tiles fetched one zoom back and laid out at 512px — text
-  // renders twice as large and stays crisp, so city and road names are
-  // readable on stream when the camera is deep in a warning.
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png', {
     pane: 'labels',
     subdomains: 'abcd',
@@ -76,9 +92,6 @@ export function createBroadcastMap(el, bbox) {
     tileSize: 512,
     zoomOffset: -1,
   }).addTo(map);
-
-  map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
-  return map;
 }
 
 export async function addStateBorders(map) {

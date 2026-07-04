@@ -20,13 +20,18 @@ npm run dev          # open http://localhost:5173/
 
 ## What's on screen
 
-- **Map**: grey "Pivotal-style" basemap (CARTO dark remapped by CSS filter —
-  same recipe as the Website outlooks map) → SPC Day-1 categorical outlook
-  (ambient) → **animated NEXRAD loop** (30-min window, 7 frames, always in
-  motion, cache re-busted every 5 min) → white state borders → SPC mesoscale
-  discussions (dashed cyan, via IEM) → watches (dashed) → warning polygons →
-  curated town labels (only in the overview zoom band; CARTO covers towns when
-  zoomed in).
+- **Map**: grey "Pivotal-style" **vector basemap** — OpenFreeMap tiles rendered
+  by MapLibre GL inside Leaflet (`@maplibre/maplibre-gl-leaflet`), restyled at
+  runtime from the positron style (`src/map/vector-basemap.js`): grey land /
+  dark water, county lines, and a separate labels-only GL layer *above* the
+  radar with road names + highway shields that populate at warning-tour zoom.
+  Falls back to the old CARTO raster stack (CSS grey filter) if the style
+  fetch fails. Stack: base → SPC Day-1 categorical outlook (ambient) →
+  **animated NEXRAD loop** (30-min window, 7 frames, always in motion, cache
+  re-busted every 5 min) → white state borders → SPC mesoscale discussions
+  (dashed cyan, via IEM) → watches (dashed) → warning polygons → curated
+  city/town labels (own the overview zoom band < 8.45; GL labels take over
+  when zoomed in).
 - **Director** (`src/director/director.js`): new warnings pre-empt the camera —
   fly deep into the polygon (streets visible), show the detail card, then
   rotate overview ↔ warnings by severity. A lone warning keeps most of the
@@ -51,10 +56,11 @@ npm run dev          # open http://localhost:5173/
 | mesonet.agron.iastate.edu | NEXRAD radar tiles · SPC MCD polygons (`/api/1/nws/spc_mcd.geojson`) |
 | api.weather.gov `/offices/SHV` + zones | region definition (build script) |
 | TIGERweb + census.gov | tract population grid (build script) |
+| tiles.openfreemap.org | vector basemap tiles + fonts + shield sprites (free for commercial use) |
 
 ## Later phases (see plan)
 
 Streaming pipeline (VPS + Xvfb + Chromium + ffmpeg → YouTube RTMP), audio loop,
 watchdogs/hardening, then fronts/pressure centers, live cams, TTS callouts.
-Before going public/monetized: swap CARTO tiles (non-commercial terms) for
-OpenFreeMap/Protomaps.
+(Basemap licensing is resolved: OpenFreeMap is free for commercial use; CARTO
+raster remains only as an emergency fallback.)

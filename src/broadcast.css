@@ -45,10 +45,11 @@ html, body {
   position: absolute; inset: 0;
   top: var(--banner-h);
   height: calc(1080px - var(--banner-h) - var(--ticker-h));
-  background: var(--bg-base);
+  background: #191919; /* water grey — shows before vector tiles paint */
 }
 
-/* Grey "Pivotal-style" basemap (class added by map/basemap.js).
+/* FALLBACK ONLY — grey "Pivotal-style" raster basemap (class added by
+   map/basemap.js when the OpenFreeMap vector style can't be fetched).
    Remaps the dark CARTO base tiles: CARTO dark is land rgb(9) / water rgb(38)
    — water BRIGHTER than land — so invert first, then scale:
    land → ~#595959, water → ~#191919. Derived from actual tile pixel values in
@@ -307,6 +308,9 @@ path.warn-flash { animation: warnFlash 0.65s ease-in-out infinite; }
   flex: 0 0 auto;
 }
 .city-label.tier-3 { font-size: 11px; color: #d5deee; }
+.city-label.tier-1 { font-size: 15px; font-weight: 700; }
+.city-label.tier-1::before { width: 6px; height: 6px; }
+.city-label.tier-0 { font-size: 12px; font-weight: 500; color: #b9c4d8; }
 
 /* Status chip: outlook day / precip-tracking label (bottom-right, idle) */
 #outlook-chip {
