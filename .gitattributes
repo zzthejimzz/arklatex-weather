@@ -1,0 +1,2 @@
+# stream.sh etc. execute on Linux — CRLF breaks the shebang
+*.sh text eol=lf
