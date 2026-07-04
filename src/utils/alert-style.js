@@ -6,8 +6,13 @@ const STYLES = [
   [/severe thunderstorm warning/i,     { color: '#ffd23f', icon: '⛈️', abbr: 'SVR',       tone: 'amber' }],
   [/flash flood warning/i,             { color: '#2ecc55', icon: '🌊', abbr: 'FFW',       tone: 'green' }],
   [/extreme wind warning/i,            { color: '#ff5ce1', icon: '💨', abbr: 'EWW',       tone: 'red' }],
-  [/tornado watch/i,                   { color: '#ff8f8f', icon: '🌪️', abbr: 'TOR WATCH', tone: 'red',   watch: true }],
-  [/severe thunderstorm watch/i,       { color: '#ffe08a', icon: '⛈️', abbr: 'SVR WATCH', tone: 'amber', watch: true }],
+  // Watches follow NWS convention: tornado watch yellow, severe t-storm watch
+  // orange (our call — NWS pale pink reads as nothing on a grey broadcast map).
+  // TOR watch is a deeper golden yellow than the SVR *warning* polygon
+  // (#ffd23f) so the two never read as the same alert when they share the
+  // screen during outbreaks; dashed-vs-solid carries the rest.
+  [/tornado watch/i,                   { color: '#e8b400', icon: '🌪️', abbr: 'TOR WATCH', tone: 'amber', watch: true }],
+  [/severe thunderstorm watch/i,       { color: '#ff8c1a', icon: '⛈️', abbr: 'SVR WATCH', tone: 'amber', watch: true }],
   [/flash flood watch|flood watch/i,   { color: '#4dbd91', icon: '💧', abbr: 'FFA',       tone: 'green', watch: true }],
   [/flood (warning|statement)/i,       { color: '#00a878', icon: '💧', abbr: 'FLOOD',     tone: 'green' }],
   [/flood advisory/i,                  { color: '#57d9a3', icon: '💧', abbr: 'FLD ADV',   tone: 'green' }],
