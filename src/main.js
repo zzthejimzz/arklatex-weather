@@ -5,13 +5,17 @@ import { createBroadcastMap, addStateBorders } from './map/basemap.js';
 import { createRadarLoop } from './map/radar-loop.js';
 import { createOutlookLayer } from './map/outlook-layer.js';
 import { createAlertsLayer } from './map/alerts-layer.js';
+import { createReportsLayer } from './map/reports-layer.js';
 import { createMcdLayer } from './map/mcd-layer.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
 import { createTicker } from './ui/ticker.js';
+import { createForecastPanel } from './ui/forecast-panel.js';
+import { createCityForecasts } from './data/forecast.js';
 import { createDirector } from './director/director.js';
 import { createLiveSource } from './data/alerts.js';
+import { createReportsSource, pickTourReports } from './data/reports.js';
 import { createReplaySource } from './data/replay.js';
 import { loadPopulationGrid } from './data/population.js';
 import { createPrecipScout } from './data/precip-scout.js';
@@ -52,7 +56,7 @@ async function boot() {
   const map = createBroadcastMap(document.getElementById('map'), geo.bbox);
   addStateBorders(map);
   addCityLabels(map);
-  createRadarLoop(map);
+  const radar = createRadarLoop(map);
   createMcdLayer(map, geo);
 
   const outlookLayer = createOutlookLayer(map);
@@ -64,11 +68,37 @@ async function boot() {
   const ticker = createTicker(document.getElementById('ticker'), geo);
   const precipScout = createPrecipScout(geo);
 
-  const regionBounds = L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(0.04);
-  const director = createDirector({ map, alertsLayer, outlookLayer, popup, regionBounds, precipScout });
+  const forecasts = createCityForecasts();
+  forecasts.start();
+  const forecastPanel = createForecastPanel({
+    root: document.getElementById('forecast-root'), map, forecasts,
+  });
 
   const replayName = new URLSearchParams(location.search).get('replay');
   const source = replayName ? createReplaySource(geo, replayName) : createLiveSource(geo);
+
+  // Local Storm Reports (ground truth pins + director tour stops). Live only —
+  // current real-world reports would be incongruent over a replayed outbreak.
+  const reportsLayer = createReportsLayer(map);
+  let latestReports = [];
+  if (!replayName) {
+    createReportsSource(geo).start(({ reports, added }) => {
+      reportsLayer.update(reports, added);
+      latestReports = reports;
+    });
+  }
+  // get() = curated idle-tour picks (computed on demand — the recency window
+  // keeps sliding); all() = everything on the map, for in-warning matching.
+  const reportsFeed = {
+    get: () => pickTourReports(latestReports),
+    all: () => latestReports,
+  };
+
+  const regionBounds = L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(0.04);
+  const director = createDirector({
+    map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
+    radar, reportsLayer, reportsFeed,
+  });
 
   const chip = document.getElementById('mode-chip');
   chip.classList.toggle('replay', !!replayName);
@@ -93,13 +123,29 @@ async function boot() {
   );
 
   // Dev-only: ?cam=lat,lon,zoom parks the camera and skips the director —
-  // for checking framing / label collision at arbitrary zooms.
-  const cam = new URLSearchParams(location.search).get('cam');
+  // for checking framing / label collision at arbitrary zooms. ?panel forces
+  // the forecast panel open as soon as its data arrives.
+  const params = new URLSearchParams(location.search);
+  const cam = params.get('cam');
   if (cam) {
     const [lat, lon, z] = cam.split(',').map(Number);
     map.setView([lat, lon], z);
+  } else if (params.has('lsr')) {
+    // Dev-only: park on the newest storm report with its card + highlighted
+    // pin — checks the report visuals without waiting out the director.
+    const t = setInterval(() => {
+      const r = latestReports[0];
+      if (!r) return;
+      clearInterval(t);
+      map.setView([r.lat, r.lon], 10.5);
+      reportsLayer.highlight(r.id);
+      popup.showReport(r);
+    }, 500);
   } else {
     director.boot();
+  }
+  if (params.has('panel')) {
+    const t = setInterval(() => { if (forecastPanel.show()) clearInterval(t); }, 500);
   }
 }
 

@@ -58,6 +58,33 @@ export function createPopup(root) {
       </div>`;
   }
 
+  // Detail card for a Local Storm Report the director is visiting — same
+  // card chrome as warnings, but headed by the report type and closing with
+  // the spotter's remark (the human detail is the broadcast gold).
+  function showReport(report) {
+    current = null; // no expiry countdown to tick
+    const rows = [];
+    rows.push(row('🕐', 'Reported', `${formatLocalTime(report.valid)} · ${agoText(report.valid)}`));
+    if (report.magnitude) rows.push(row('📏', 'Magnitude', report.magnitude, true));
+    if (report.source) rows.push(row('🗣️', 'Source', titleCase(report.source)));
+    rows.push(row('🏢', 'Relayed by', `NWS ${report.wfo ?? '—'}`));
+
+    const state = STATE_NAMES[report.st] ?? report.st ?? '';
+    const remark = (report.remark ?? '').trim();
+
+    root.innerHTML = `
+      <div class="warn-card" style="--alert-color:${report.style.color}">
+        <div class="warn-card-tag">Local Storm Report</div>
+        <div class="warn-card-head">
+          <div class="warn-card-event">${report.style.icon} ${report.style.label}</div>
+        </div>
+        <div class="warn-card-area">${report.city}, ${report.county} County<br>
+          <span class="states">${state}</span></div>
+        <div class="warn-card-rows">${rows.join('')}</div>
+        ${remark ? `<div class="warn-card-remark">${escapeHtml(remark)}</div>` : ''}
+      </div>`;
+  }
+
   function hide() {
     current = null;
     root.innerHTML = '';
@@ -69,9 +96,21 @@ export function createPopup(root) {
   }
   setInterval(tick, 1000);
 
-  return { show, hide };
+  return { show, showReport, hide };
 }
 
 function titleCase(s) {
   return String(s).toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function agoText(iso) {
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60_000));
+  if (min < 1) return 'just in';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  return `${h}h ${min % 60}m ago`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }

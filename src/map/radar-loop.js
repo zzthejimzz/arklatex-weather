@@ -20,14 +20,34 @@ const REFRESH_MS = 5 * 60 * 1000;
 const OPACITY = 1; // the palette carries per-intensity transparency
 const MAX_ZOOM = 14; // IEM serves n0q tiles through z14 (verified)
 
+// Shared image cache. Every tile render pulls its 8 neighbors — which are
+// other tiles' centers — and the director prewarms fly destinations, so the
+// same URL is wanted many times in quick succession. Caching the promise
+// dedupes in-flight fetches and skips re-decodes when the camera pans back.
+const imgCache = new Map(); // url → Promise<HTMLImageElement>
+const IMG_CACHE_MAX = 900;
+
 function loadImage(url) {
-  return new Promise((resolve, reject) => {
+  let p = imgCache.get(url);
+  if (p) return p;
+  p = new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = (e) => {
+      imgCache.delete(url); // failures aren't sticky — a retry may succeed
+      reject(e);
+    };
     img.src = url;
   });
+  imgCache.set(url, p);
+  if (imgCache.size > IMG_CACHE_MAX) {
+    for (const k of imgCache.keys()) {
+      imgCache.delete(k);
+      if (imgCache.size <= IMG_CACHE_MAX * 0.9) break;
+    }
+  }
+  return p;
 }
 
 const SmoothRadarLayer = L.GridLayer.extend({
@@ -111,6 +131,13 @@ export function createRadarLoop(map) {
       pane: 'radar',
       opacity: 0,
       maxZoom: MAX_ZOOM,
+      // Camera is always flying somewhere — load while moving, keep a fat
+      // ring of rendered tiles around the view, and don't re-render at every
+      // intermediate zoom during a fly (each tile is an expensive 9-fetch +
+      // blur pipeline; updateInterval throttles the churn).
+      updateWhenIdle: false,
+      keepBuffer: 4,
+      updateInterval: 350,
     }).addTo(map),
   );
 
@@ -141,6 +168,38 @@ export function createRadarLoop(map) {
 
   setInterval(() => {
     ts = Date.now();
+    imgCache.clear(); // URLs just changed — everything cached is stale
     frames.forEach((f, i) => f.setUrl(url(i, ts)));
   }, REFRESH_MS);
+
+  // Warm the tiles for a fly destination while the camera is still in the
+  // air, so radar is painted (not popping in) when the shot settles. The
+  // director calls this with the same bounds/maxZoom it hands flyToBounds.
+  function prewarm(bounds, maxZoom = MAX_ZOOM) {
+    const z = Math.round(Math.min(map.getBoundsZoom(bounds), maxZoom, MAX_ZOOM));
+    const n = 2 ** z;
+    const nw = map.project(bounds.getNorthWest(), z).divideBy(256).floor();
+    const se = map.project(bounds.getSouthEast(), z).divideBy(256).floor();
+    const x0 = nw.x - 1; // +1 ring: neighbor pads of the edge tiles
+    const x1 = se.x + 1;
+    const y0 = Math.max(0, nw.y - 1);
+    const y1 = Math.min(n - 1, se.y + 1);
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 64) return; // too wide to warm usefully
+
+    // Newest frame first — it's what's on screen most of the loop.
+    for (let i = OFFSETS.length - 1; i >= 0; i--) {
+      const tpl = url(i, ts);
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const u = tpl
+            .replace('{z}', z)
+            .replace('{x}', ((x % n) + n) % n)
+            .replace('{y}', y);
+          loadImage(u).catch(() => {});
+        }
+      }
+    }
+  }
+
+  return { prewarm };
 }

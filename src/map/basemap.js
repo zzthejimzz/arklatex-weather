@@ -16,6 +16,7 @@
 //   mcd 458           mesoscale discussions (dashed)
 //   watches 460       watch outlines
 //   warnings 465      warning polygons
+//   reports 470       local storm report pins
 //   cities 640        curated city labels
 //   labels 650        vector labels (fallback: CARTO dark_only_labels)
 import L from 'leaflet';
@@ -31,6 +32,7 @@ const PANES = {
   mcd: 458,
   watches: 460,
   warnings: 465,
+  reports: 470,
   cities: 640,
   labels: 650,
 };
