@@ -1,0 +1,15 @@
+[Unit]
+Description=ArkLaTex broadcast page server (dist + SPC proxy)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=arklatex
+WorkingDirectory=/opt/arklatex
+ExecStart=/usr/bin/node /opt/arklatex/deploy/serve.js 8080
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

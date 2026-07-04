@@ -1,0 +1,19 @@
+[Unit]
+Description=ArkLaTex broadcast stream (Xvfb + Chromium + ffmpeg -> YouTube)
+After=network-online.target arklatex-serve.service
+Wants=network-online.target
+Requires=arklatex-serve.service
+
+[Service]
+Type=simple
+User=arklatex
+EnvironmentFile=/etc/arklatex.env
+WorkingDirectory=/opt/arklatex
+ExecStart=/opt/arklatex/deploy/stream.sh
+KillMode=control-group
+Restart=always
+RestartSec=10
+# Losing the stream for 10s beats YouTube seeing a corrupt feed for minutes.
+
+[Install]
+WantedBy=multi-user.target

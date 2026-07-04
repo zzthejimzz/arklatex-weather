@@ -1,0 +1,6 @@
+[Unit]
+Description=ArkLaTex frozen-frame watchdog (oneshot; scheduled by timer)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/arklatex/deploy/watchdog.sh
