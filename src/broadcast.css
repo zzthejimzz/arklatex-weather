@@ -60,8 +60,8 @@ html, body {
 }
 
 /* Radar frames render normally over the grey base (no screen blend — that
-   washes out over mid-grey land); a touch of saturation keeps cores vivid. */
-.leaflet-radar-pane { filter: saturate(1.15) contrast(1.03); }
+   washes out over mid-grey land). Saturation/blur are set inline by
+   map/radar-loop.js and scale with zoom. */
 
 /* ─── Banner ────────────────────────────────────────────────────────── */
 #banner {
@@ -247,12 +247,20 @@ html, body {
 .tk-sep { color: var(--text-faint); font-size: 13px; }
 .tk-dim { color: var(--text-muted); font-size: 17px; }
 
-/* ─── Watch flash (subtle, while the director features a watch) ─────── */
+/* ─── Alert flashes ─────────────────────────────────────────────────── */
+/* Subtle pulse while the director features a watch */
 @keyframes watchFlash {
   0%, 100% { stroke-opacity: 1; }
   50%      { stroke-opacity: 0.3; }
 }
 path.watch-flash { animation: watchFlash 1.8s ease-in-out infinite; }
+
+/* Hard attention flash on a newly issued warning as the camera arrives */
+@keyframes warnFlash {
+  0%, 100% { stroke-opacity: 1; }
+  50%      { stroke-opacity: 0.08; }
+}
+path.warn-flash { animation: warnFlash 0.65s ease-in-out infinite; }
 
 /* ─── Mode chip (bottom-left status) ────────────────────────────────── */
 #mode-chip {
@@ -282,23 +290,23 @@ path.watch-flash { animation: watchFlash 1.8s ease-in-out infinite; }
 .leaflet-control-attribution a { color: var(--text-faint) !important; }
 .leaflet-control-zoom { display: none; } /* broadcast output — no interactive chrome */
 
-/* Curated city labels */
+/* Curated city labels — overview zoom band only; kept small and quiet so the
+   map doesn't read as cluttered when the whole region is in frame. */
 .city-label {
-  color: #fff;
-  font-size: 15px; font-weight: 700;
-  text-shadow: 0 0 4px #000, 0 0 8px #000, 1px 1px 2px #000;
+  color: #f4f7fd;
+  font-size: 13px; font-weight: 600;
+  text-shadow: 0 0 4px #000, 0 0 7px #000, 1px 1px 2px #000;
   white-space: nowrap;
-  display: flex; align-items: center; gap: 6px;
-  transform: translate(8px, -8px);
+  display: flex; align-items: center; gap: 5px;
+  transform: translate(7px, -7px);
 }
 .city-label::before {
   content: '';
-  width: 7px; height: 7px; border-radius: 50%;
-  background: #fff; border: 1.5px solid #000;
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #fff; border: 1px solid #000;
   flex: 0 0 auto;
 }
-.city-label.tier-1 { font-size: 18px; }
-.city-label.tier-3 { font-size: 13px; font-weight: 600; color: #e2e8f4; }
+.city-label.tier-3 { font-size: 11px; color: #d5deee; }
 
 /* Status chip: outlook day / precip-tracking label (bottom-right, idle) */
 #outlook-chip {

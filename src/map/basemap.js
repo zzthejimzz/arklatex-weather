@@ -20,7 +20,7 @@
 import L from 'leaflet';
 
 const CARTO_ATTR = '&copy; OSM &copy; CARTO &middot; Radar: Iowa State Mesonet / NEXRAD';
-const MAX_ZOOM = 12;
+const MAX_ZOOM = 14; // deep warning zoom — CARTO labels carry road names from ~z11
 
 const PANES = {
   radar: 450,
@@ -59,10 +59,22 @@ export function createBroadcastMap(el, bbox) {
     maxZoom: MAX_ZOOM,
   }).addTo(map);
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+  // Labels come in two layers that swap at z8.5: normal tiles for overview,
+  // then @2x retina tiles fetched one zoom back and laid out at 512px — text
+  // renders twice as large and stays crisp, so city and road names are
+  // readable on stream when the camera is deep in a warning.
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}.png', {
     pane: 'labels',
     subdomains: 'abcd',
+    maxZoom: 8.5,
+  }).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png', {
+    pane: 'labels',
+    subdomains: 'abcd',
+    minZoom: 8.5,
     maxZoom: MAX_ZOOM,
+    tileSize: 512,
+    zoomOffset: -1,
   }).addTo(map);
 
   map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);

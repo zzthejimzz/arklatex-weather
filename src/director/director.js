@@ -16,13 +16,13 @@ const OVERVIEW_DWELL_MS = 30_000;
 const SOLO_TOUR_DWELL_MS = 45_000; // lone warning holds the shot longer
 const SOLO_OVERVIEW_DWELL_MS = 15_000;
 const FLY_MS = 2_400;
-const TOUR_MAX_ZOOM = 10.6; // deep enough that streets/towns read on air
+const TOUR_MAX_ZOOM = 11.3; // CARTO labels road names from ~z11 — streets read on air
 const WATCH_MAX_ZOOM = 8.5;
 const POI_MAX_ZOOM = 9.4;
 
 export function createDirector({ map, alertsLayer, outlookLayer, popup, regionBounds, precipScout }) {
   const chipEl = document.getElementById('outlook-chip');
-  const wideBounds = regionBounds.pad(1.1); // outlook shots need surrounding states
+  const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
   let active = [];
   let queue = [];      // newly issued warnings awaiting an interrupt tour
@@ -156,9 +156,10 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, regionBo
   function startTour(alert, isNew, dwell = TOUR_DWELL_MS, maxZoom = TOUR_MAX_ZOOM) {
     touring = alert;
     hideChip();
-    const bounds = L.latLngBounds(boundsToLeaflet(alert.bounds)).pad(0.45);
+    const bounds = L.latLngBounds(boundsToLeaflet(alert.bounds)).pad(0.3);
     map.flyToBounds(bounds, { duration: FLY_MS / 1000, maxZoom });
     alertsLayer.highlight(alert.key);
+    if (isNew) alertsLayer.flash(alert.key, FLY_MS + 5000); // flash as the camera arrives
     popup.show(alert, isNew);
     dwellUntil = Date.now() + FLY_MS + dwell;
   }

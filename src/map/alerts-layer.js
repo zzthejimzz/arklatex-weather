@@ -6,6 +6,7 @@ import L from 'leaflet';
 export function createAlertsLayer(map) {
   const group = L.layerGroup().addTo(map);
   const rendered = new Map(); // key → { layer, alert }
+  const flashUntil = new Map(); // key → timestamp; survives layer rebuilds
   let highlightKey = null;
 
   function visualStyle(alert, highlighted) {
@@ -48,13 +49,27 @@ export function createAlertsLayer(map) {
     syncFlash();
   }
 
-  // Watches get a subtle flashing outline while the director features them.
+  // Watches flash subtly while featured; a newly issued warning flashes hard
+  // for a few seconds as the camera arrives so the eye lands on it.
   function syncFlash() {
+    const now = Date.now();
     for (const { layer, alert } of rendered.values()) {
-      const flash = !!alert.style.watch && alert.key === highlightKey;
-      layer.eachLayer(l => l.getElement()?.classList.toggle('watch-flash', flash));
+      const watchFlash = !!alert.style.watch && alert.key === highlightKey;
+      const warnFlash = (flashUntil.get(alert.key) ?? 0) > now;
+      layer.eachLayer(l => {
+        const el = l.getElement();
+        if (!el) return;
+        el.classList.toggle('watch-flash', watchFlash);
+        el.classList.toggle('warn-flash', warnFlash);
+      });
     }
   }
 
-  return { update, highlight };
+  function flash(key, ms = 4500) {
+    flashUntil.set(key, Date.now() + ms);
+    syncFlash();
+    setTimeout(syncFlash, ms + 100); // clear the class when the window closes
+  }
+
+  return { update, highlight, flash };
 }
