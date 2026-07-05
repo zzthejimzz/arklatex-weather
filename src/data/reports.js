@@ -9,9 +9,12 @@ import { pointInGeometry } from '../utils/geometry.js';
 
 const LSR_URL = 'https://mesonet.agron.iastate.edu/geojson/lsr.geojson?hours=3&states=AR,LA,TX,OK';
 const POLL_MS = 2 * 60 * 1000;
-const TOUR_WINDOW_MS = 90 * 60 * 1000; // only recent reports earn a camera visit
+// If a pin is on the map (3 h feed window) it's eligible for a camera visit —
+// the card shows its age, so staleness is transparent on air. Priority 50
+// admits measured gusts (55) but keeps heavy rain / lightning (40) map-only.
+const TOUR_WINDOW_MS = 3 * 60 * 60 * 1000;
 const TOUR_MAX = 3;
-const TOUR_PRIORITY = 60;
+const TOUR_PRIORITY = 50;
 
 // typetext → visual identity + base tour priority. Colors echo the alert
 // palette (utils/alert-style.js) so a hail report reads with hail-ish cyan etc.

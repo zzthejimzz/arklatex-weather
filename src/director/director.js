@@ -26,9 +26,9 @@ const MINOR_MAX_ZOOM = 9.8; // flood warnings / statements cover zones — stay 
 const REPORT_MAX_ZOOM = 11; // storm report pins: close enough to name the town
 const REPORT_BOX_M = 36_000; // fly frame around a report point (~36 km square)
 // Reports inside an active warning polygon join the warning rotation —
-// ground truth from inside the box beats another polygon lap. Fresher window
-// and shorter dwell than idle report stops so warnings keep the airtime.
-const REPORT_IN_WARN_WINDOW_MS = 60 * 60 * 1000;
+// ground truth from inside the box beats another polygon lap. Same 3 h window
+// as the map pins; shorter dwell than idle stops so warnings keep the airtime.
+const REPORT_IN_WARN_WINDOW_MS = 3 * 60 * 60 * 1000;
 const REPORT_IN_WARN_DWELL_MS = 15_000;
 const REPORT_IN_WARN_MAX = 2;
 
