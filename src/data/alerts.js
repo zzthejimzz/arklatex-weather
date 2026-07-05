@@ -11,12 +11,27 @@ const POLL_MS = 30_000;
 // VTEC gives a stable identity across CON/EXT updates of the same warning
 // (each update gets a fresh CAP id, but office+phenomenon+significance+ETN
 // stays put) — this stops the director from re-touring every update.
-export function parseVtec(props) {
-  const raw = props?.parameters?.VTEC?.[0];
-  if (!raw) return null;
-  const m = raw.match(/\/?[A-Z]\.([A-Z]{3})\.(K[A-Z]{3})\.([A-Z]{2})\.([A-Z])\.(\d{4})/);
+function parseVtecString(raw) {
+  const m = raw?.match(/\/?[A-Z]\.([A-Z]{3})\.(K[A-Z]{3})\.([A-Z]{2})\.([A-Z])\.(\d{4})/);
   if (!m) return null;
   return { action: m[1], office: m[2], phen: m[3], sig: m[4], etn: m[5] };
+}
+
+export function parseVtec(props) {
+  return parseVtecString(props?.parameters?.VTEC?.[0]);
+}
+
+// Actions meaning the event is over or replaced by a different product. Such
+// segments stay in /alerts/active until their *message* expires — observed
+// live: an EXP severe thunderstorm warning listed 6 minutes past its end —
+// so they must be filtered or a dead warning lingers on air. A segment can
+// carry several VTEC lines (e.g. CAN one product + NEW its replacement);
+// only drop it when every line says the event is done.
+const DEAD_ACTIONS = new Set(['CAN', 'EXP', 'UPG']);
+export function eventEnded(props) {
+  if (props?.messageType === 'Cancel') return true;
+  const vtecs = (props?.parameters?.VTEC ?? []).map(parseVtecString).filter(Boolean);
+  return vtecs.length > 0 && vtecs.every(v => DEAD_ACTIONS.has(v.action));
 }
 
 // Zone/county-based products (watches, winter, flood) often ship without a
@@ -63,13 +78,19 @@ export function enrichAlert(feature, geo) {
   };
 }
 
+// `ends` is when the event ends; `expires` is only when this *message* goes
+// stale (long-fuse products like flood warnings carry ends hours past expires
+// and get refreshed by follow-up statements — 8 of 24 alerts in a live feed
+// sample had ends > expires). Prefer the event end.
 function notExpired(feature) {
-  const end = feature.properties?.expires ?? feature.properties?.ends;
+  const end = feature.properties?.ends ?? feature.properties?.expires;
   return !end || new Date(end) > new Date();
 }
 
+const SEEN_TTL_MS = 24 * 60 * 60 * 1000; // don't grow forever on a 24/7 page
+
 export function createLiveSource(geo) {
-  const seen = new Set();
+  const seen = new Map(); // key → last time it appeared in the feed
   let first = true;
   let timer = null;
 
@@ -82,15 +103,24 @@ export function createLiveSource(geo) {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
 
-          const alerts = (data.features ?? [])
-            .filter(f => notExpired(f) && alertInRegion(f, geo))
-            .map(f => enrichAlert(f, geo))
-            .sort((a, b) => b.score - a.score);
+          // The feed can briefly list an original and its update side by side;
+          // both map to one VTEC key, and downstream keys layers/plans by it —
+          // keep only the newest message per key.
+          const byKey = new Map();
+          for (const f of data.features ?? []) {
+            if (!notExpired(f) || eventEnded(f.properties) || !alertInRegion(f, geo)) continue;
+            const a = enrichAlert(f, geo);
+            const prev = byKey.get(a.key);
+            if (!prev || new Date(a.props.sent) > new Date(prev.props.sent)) byKey.set(a.key, a);
+          }
+          const alerts = [...byKey.values()].sort((a, b) => b.score - a.score);
 
           // Suppress "new" on the very first poll — booting into an active day
           // shouldn't fire a tour for every pre-existing warning at once.
+          const now = Date.now();
           const added = first ? [] : alerts.filter(a => !seen.has(a.key));
-          for (const a of alerts) seen.add(a.key);
+          for (const a of alerts) seen.set(a.key, now);
+          for (const [key, at] of seen) if (now - at > SEEN_TTL_MS) seen.delete(key);
           first = false;
 
           onStatus({ ok: true, at: Date.now() });
