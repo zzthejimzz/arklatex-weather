@@ -4,10 +4,6 @@
 // dashed in the 'watches' pane below. The alert the director is touring gets
 // a heavier, brighter treatment, and outlines thicken as the camera zooms in.
 import L from 'leaflet';
-import { motionArrows } from '../utils/storm-motion.js';
-
-const ARROW_WEIGHT = 4;
-const ARROW_CASING = 7.5;
 
 export function createAlertsLayer(map) {
   const group = L.layerGroup().addTo(map);
@@ -48,16 +44,10 @@ export function createAlertsLayer(map) {
   }
 
   function restyle() {
-    for (const { layer, casing, alert, arrow, arrowCasing } of rendered.values()) {
+    for (const { layer, casing, alert } of rendered.values()) {
       const highlighted = alert.key === highlightKey;
       layer.setStyle(visualStyle(alert, highlighted));
       casing?.setStyle(casingStyle(alert, highlighted));
-      // Arrows keep fixed weights, but setStyle must still run at zoomend to
-      // undo counterScale's mid-fly stroke-width overrides — polygons get
-      // this via their restyle above, and without it an arrow stays hairline
-      // after a zoom-in until the next data tick rebuilds the layer.
-      arrow?.eachLayer(l => l.setStyle({ weight: ARROW_WEIGHT }));
-      arrowCasing?.eachLayer(l => l.setStyle({ weight: ARROW_CASING }));
     }
   }
 
@@ -72,13 +62,11 @@ export function createAlertsLayer(map) {
   }
   function counterScale() {
     const scale = map.getZoomScale(map.getZoom(), paneZoom);
-    for (const { layer, casing, alert, arrow, arrowCasing } of rendered.values()) {
+    for (const { layer, casing, alert } of rendered.values()) {
       const highlighted = alert.key === highlightKey;
       const line = alert.style.watch ? 2.5 : baseWeight(highlighted);
       setStrokeWidth(layer, line / scale);
       if (casing) setStrokeWidth(casing, (baseWeight(highlighted) + 3.5) / scale);
-      if (arrow) setStrokeWidth(arrow, ARROW_WEIGHT / scale);
-      if (arrowCasing) setStrokeWidth(arrowCasing, ARROW_CASING / scale);
     }
   }
   map.on('zoom', counterScale);
@@ -107,24 +95,7 @@ export function createAlertsLayer(map) {
         style: () => visualStyle(alert, highlighted),
       });
       group.addLayer(layer);
-
-      // Storm motion arrow (warnings with a TIME...MOT...LOC line): white
-      // over black casing so it reads on any radar hue, one per storm point.
-      let arrow = null;
-      let arrowCasing = null;
-      if (!alert.style.watch && alert.motion) {
-        const line = (latlngs, color, weight, opacity) =>
-          L.polyline(latlngs, {
-            pane: 'warnings', interactive: false, color, weight, opacity,
-            lineCap: 'round', lineJoin: 'round', fill: false,
-          });
-        const segs = motionArrows(alert.motion).flatMap(a => [a.shaft, a.head]);
-        arrowCasing = L.layerGroup(segs.map(s => line(s, '#000000', ARROW_CASING, 0.8)));
-        arrow = L.layerGroup(segs.map(s => line(s, '#ffffff', ARROW_WEIGHT, 0.95)));
-        group.addLayer(arrowCasing);
-        group.addLayer(arrow);
-      }
-      rendered.set(alert.key, { layer, casing, alert, arrow, arrowCasing });
+      rendered.set(alert.key, { layer, casing, alert });
     }
     requestAnimationFrame(() => {
       syncFlash(); // paths need to hit the DOM first

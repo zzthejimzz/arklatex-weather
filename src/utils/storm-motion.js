@@ -1,6 +1,5 @@
-// Storm motion from the CAP eventMotionDescription parameter, and the two
-// things the broadcast does with it: "towns in the path" ETAs for the warning
-// card, and a motion arrow for the map.
+// Storm motion from the CAP eventMotionDescription parameter, used for the
+// warning card's "Moving E at 46 mph" row and "towns in the path" ETAs.
 //
 // The parameter encodes the product's TIME...MOT...LOC line, e.g.
 //   "2026-07-05T21:52:00-00:00...storm...263DEG...35KT...32.52,-93.75 32.61,-93.90"
@@ -46,15 +45,6 @@ export function compass8(deg) {
   return COMPASS_8[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
 }
 
-// Destination of a km-distance hop from p along bearing deg.
-function project(p, deg, km) {
-  const th = (deg * Math.PI) / 180;
-  return {
-    lat: p.lat + (km * Math.cos(th)) / KM_PER_DEG,
-    lon: p.lon + (km * Math.sin(th)) / (KM_PER_DEG * Math.cos((p.lat * Math.PI) / 180)),
-  };
-}
-
 // "Towns in the path": places within a corridor along the storm's track,
 // with arrival times. The corridor half-width acknowledges a warned storm
 // isn't a point; the lookahead stops us naming towns the warning will never
@@ -93,22 +83,4 @@ export function townsInPath(motion, { now = Date.now(), max = 3 } = {}) {
     }
   }
   return [...best.values()].sort((a, b) => a.etaMs - b.etaMs).slice(0, max);
-}
-
-// Map arrow geometry: one shaft per storm point covering ~`minutes` of travel,
-// plus an arrowhead polyline [left-barb, tip, right-barb]. Returned as
-// Leaflet [lat, lon] arrays; km-based so it scales naturally with zoom.
-export function motionArrows(motion, minutes = 30) {
-  if (!motion) return [];
-  const shaftKm = Math.max(8, (motion.speedKmh * minutes) / 60);
-  const barbKm = Math.max(3, shaftKm * 0.22);
-  return motion.points.map(p => {
-    const tip = project(p, motion.toDeg, shaftKm);
-    const left = project(tip, motion.toDeg + 150, barbKm);
-    const right = project(tip, motion.toDeg - 150, barbKm);
-    return {
-      shaft: [[p.lat, p.lon], [tip.lat, tip.lon]],
-      head: [[left.lat, left.lon], [tip.lat, tip.lon], [right.lat, right.lon]],
-    };
-  });
 }
