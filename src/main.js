@@ -16,6 +16,7 @@ import { createCityForecasts } from './data/forecast.js';
 import { createDirector } from './director/director.js';
 import { createLiveSource } from './data/alerts.js';
 import { createReportsSource, pickTourReports } from './data/reports.js';
+import { createMcdSource, createMcdReplaySource, pickTourMcds } from './data/mcd.js';
 import { createReplaySource } from './data/replay.js';
 import { loadPopulationGrid } from './data/population.js';
 import { createPrecipScout } from './data/precip-scout.js';
@@ -57,7 +58,7 @@ async function boot() {
   addStateBorders(map);
   addCityLabels(map);
   const radar = createRadarLoop(map);
-  createMcdLayer(map, geo);
+  const mcdLayer = createMcdLayer(map);
 
   const outlookLayer = createOutlookLayer(map);
   outlookLayer.show('day1');
@@ -94,10 +95,24 @@ async function boot() {
     all: () => latestReports,
   };
 
+  // Mesoscale Discussions — outline on the map + director idle-tour stops. Runs
+  // in both modes: live from IEM, or from the replay file's `mcds` array (so
+  // the tour can be exercised when there's no live MCD over the region).
+  let latestMcds = [];
+  const mcdSource = replayName ? createMcdReplaySource(geo, replayName) : createMcdSource(geo);
+  mcdSource.start(({ mcds }) => {
+    mcdLayer.update(mcds);
+    latestMcds = mcds;
+  });
+  const mcdFeed = {
+    get: () => pickTourMcds(latestMcds),
+    all: () => latestMcds,
+  };
+
   const regionBounds = L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(0.04);
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
-    radar, reportsLayer, reportsFeed,
+    radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed,
   });
 
   const chip = document.getElementById('mode-chip');
@@ -140,6 +155,17 @@ async function boot() {
       map.setView([r.lat, r.lon], 10.5);
       reportsLayer.highlight(r.id);
       popup.showReport(r);
+    }, 500);
+  } else if (params.has('mcd')) {
+    // Dev-only: park on the newest MCD with its outline highlighted + card —
+    // checks the MCD visuals without waiting out the director.
+    const t = setInterval(() => {
+      const m = latestMcds[0];
+      if (!m || !m.bounds) return;
+      clearInterval(t);
+      map.fitBounds(boundsToLeaflet(m.bounds), { padding: [80, 80], maxZoom: 8.2 });
+      mcdLayer.highlight(m.key);
+      popup.showMcd(m);
     }, 500);
   } else {
     director.boot();

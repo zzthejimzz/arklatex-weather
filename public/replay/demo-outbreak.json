@@ -208,5 +208,25 @@
         }
       }
     }
+  ],
+  "mcds": [
+    {
+      "delaySec": 5,
+      "durationSec": 5400,
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [[[-95.60, 31.80], [-93.30, 32.05], [-93.10, 33.70], [-95.40, 33.55], [-95.60, 31.80]]]
+        },
+        "properties": {
+          "num": 1508,
+          "concerning": "Severe potential...Watch likely",
+          "watch_confidence": 80,
+          "areas": "Northeast Texas into northwest Louisiana and southwest Arkansas",
+          "summary": "Supercells are expected to develop and intensify over the next 1-2 hours, posing a threat for very large hail, damaging winds, and a couple of tornadoes. A Tornado Watch will likely be needed shortly."
+        }
+      }
+    }
   ]
 }

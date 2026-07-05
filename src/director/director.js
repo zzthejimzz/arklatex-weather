@@ -23,6 +23,7 @@ const TOUR_MAX_ZOOM = 12.4; // vector road names populate from GL z11 (Leaflet 1
 const WATCH_MAX_ZOOM = 8.5;
 const POI_MAX_ZOOM = 9.4;
 const MINOR_MAX_ZOOM = 9.8; // flood warnings / statements cover zones — stay wide enough to frame them
+const MCD_MAX_ZOOM = 8.2;   // MCDs span multiple counties — keep the whole outline framed
 const REPORT_MAX_ZOOM = 11; // storm report pins: close enough to name the town
 const REPORT_BOX_M = 36_000; // fly frame around a report point (~36 km square)
 // Reports inside an active warning polygon join the warning rotation —
@@ -41,7 +42,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
@@ -150,12 +151,16 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       .filter(a => a.geometry && !isTourable(a) && !a.style.watch)
       .sort((a, b) => b.score - a.score)
       .slice(0, 4);
+    // Mesoscale Discussions: SPC watching an area (often before a watch). Each
+    // gets a wide camera visit with the detail card, like a watch.
+    const mcds = mcdFeed ? mcdFeed.get() : [];
     const pois = precipScout ? precipScout.get() : [];
     const reports = reportsFeed ? reportsFeed.get() : [];
-    const busy = watches.length > 0 || pois.length > 0 || minors.length > 0 || reports.length > 0;
+    const busy = watches.length > 0 || mcds.length > 0 || pois.length > 0 || minors.length > 0 || reports.length > 0;
 
     const plan = [{ type: 'overview', dwell: busy ? 25_000 : 45_000 }];
     for (const w of watches) plan.push({ type: 'watch', key: w.key, dwell: 25_000 });
+    for (const m of mcds) plan.push({ type: 'mcd', key: m.key, dwell: 22_000 });
     for (const r of reports) plan.push({ type: 'report', id: r.id, dwell: 18_000 });
     for (const m of minors) plan.push({ type: 'minor', key: m.key, dwell: 18_000 });
     for (const p of pois) plan.push({ type: 'poi', poi: p, dwell: 20_000 });
@@ -170,10 +175,15 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
 
   function runIdleStep(step) {
     if (step.type !== 'report') reportsLayer?.highlight(null);
+    if (step.type !== 'mcd') mcdLayer?.highlight(null);
     switch (step.type) {
       case 'report': {
         outlookLayer.show('day1'); // reset from any outlook step
         return startReport(step.id, step.dwell);
+      }
+      case 'mcd': {
+        outlookLayer.show('day1'); // reset from any outlook step
+        return startMcd(step.key, step.dwell);
       }
       case 'watch': {
         const live = active.find(a => a.key === step.key);
@@ -236,6 +246,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     if (!live) return advance();
     touring = null;
     alertsLayer.highlight(null);
+    mcdLayer?.highlight(null);
     forecastPanel?.hide();
     hideChip();
     reportsLayer?.highlight(live.id);
@@ -244,10 +255,28 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     dwellUntil = Date.now() + FLY_MS + dwell;
   }
 
+  // Camera visit to a Mesoscale Discussion outline — idle plan only (MCDs are
+  // context, not something to chase mid-warning). Frames the whole outline wide
+  // and shows the detail card with SPC's summary.
+  function startMcd(key, dwell) {
+    const live = (mcdFeed?.all() ?? []).find(m => m.key === key);
+    if (!live || !live.bounds) return advance();
+    touring = null;
+    alertsLayer.highlight(null);
+    reportsLayer?.highlight(null);
+    forecastPanel?.hide();
+    hideChip();
+    mcdLayer?.highlight(live.key);
+    popup.showMcd(live);
+    fly(L.latLngBounds(boundsToLeaflet(live.bounds)).pad(0.25), MCD_MAX_ZOOM);
+    dwellUntil = Date.now() + FLY_MS + dwell;
+  }
+
   function startTour(alert, isNew, dwell = TOUR_DWELL_MS, maxZoom = TOUR_MAX_ZOOM) {
     touring = alert;
     hideChip();
     reportsLayer?.highlight(null);
+    mcdLayer?.highlight(null);
     forecastPanel?.hide(); // restores full-width map before the fly is computed
     const bounds = L.latLngBounds(boundsToLeaflet(alert.bounds)).pad(0.3);
     fly(bounds, maxZoom);
@@ -262,6 +291,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     popup.hide();
     alertsLayer.highlight(null);
     reportsLayer?.highlight(null);
+    mcdLayer?.highlight(null);
     forecastPanel?.hide();
     fly(regionBounds);
     dwellUntil = Date.now() + FLY_MS + dwell;

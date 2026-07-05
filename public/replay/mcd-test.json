@@ -1,0 +1,25 @@
+{
+  "name": "MCD test — single mesoscale discussion, no active warnings",
+  "speed": 1,
+  "alerts": [],
+  "mcds": [
+    {
+      "delaySec": 0,
+      "durationSec": 3600,
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [[[-95.30, 31.90], [-93.20, 32.10], [-93.00, 33.55], [-95.10, 33.50], [-95.30, 31.90]]]
+        },
+        "properties": {
+          "num": 1509,
+          "concerning": "Severe Thunderstorm Watch 461",
+          "watch_confidence": null,
+          "areas": "Northeast Texas into northwest Louisiana and southwest Arkansas",
+          "summary": "Isolated strong to severe storms will continue to develop along a slow-moving outflow boundary through the evening, with damaging wind gusts to 65 mph and quarter-size hail the primary threats. The severe threat for Severe Thunderstorm Watch 461 continues."
+        }
+      }
+    }
+  ]
+}

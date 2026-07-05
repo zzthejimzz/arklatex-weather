@@ -3,6 +3,7 @@
 import { param } from '../director/scoring.js';
 import { formatPopulation } from '../data/population.js';
 import { formatLocalTime, countdown } from '../utils/time.js';
+import { MCD_COLOR } from '../map/mcd-layer.js';
 
 const STATE_NAMES = { TX: 'Texas', LA: 'Louisiana', AR: 'Arkansas', OK: 'Oklahoma' };
 
@@ -85,6 +86,32 @@ export function createPopup(root) {
       </div>`;
   }
 
+  // Detail card for a Mesoscale Discussion the director is visiting. Same card
+  // chrome as reports, headed by the MCD number and closing with SPC's SUMMARY
+  // line. `current` is set to a minimal expiry holder so the countdown ticks.
+  function showMcd(mcd) {
+    current = { props: { expires: mcd.expire } };
+    const rows = [];
+    rows.push(row('⏱️', 'Valid until', `${formatLocalTime(mcd.expire)} · <span class="cd">${countdown(mcd.expire) ?? '—'}</span>`));
+    if (mcd.concerning) rows.push(row('🎯', 'Concerning', titleCase(mcd.concerning), true));
+    if (Number.isFinite(mcd.watchProb)) {
+      rows.push(row('📊', 'Watch chance', `${mcd.watchProb}%`, mcd.watchProb >= 40));
+    }
+    rows.push(row('🕐', 'Issued', formatLocalTime(mcd.issue)));
+
+    const summary = (mcd.summary ?? '').trim();
+    root.innerHTML = `
+      <div class="warn-card" style="--alert-color:${MCD_COLOR}">
+        <div class="warn-card-tag">SPC Mesoscale Discussion</div>
+        <div class="warn-card-head">
+          <div class="warn-card-event">🛰️ MCD #${mcd.num}</div>
+        </div>
+        ${mcd.areas ? `<div class="warn-card-area">${escapeHtml(mcd.areas)}</div>` : ''}
+        <div class="warn-card-rows">${rows.join('')}</div>
+        ${summary ? `<div class="warn-card-remark">${escapeHtml(summary)}</div>` : ''}
+      </div>`;
+  }
+
   function hide() {
     current = null;
     root.innerHTML = '';
@@ -96,7 +123,7 @@ export function createPopup(root) {
   }
   setInterval(tick, 1000);
 
-  return { show, showReport, hide };
+  return { show, showReport, showMcd, hide };
 }
 
 function titleCase(s) {
