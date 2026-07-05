@@ -7,7 +7,7 @@ import { enrichAlert } from './alerts.js';
 
 const TICK_MS = 2_000;
 
-export function createReplaySource(geo, name) {
+export function createReplaySource(geo, name, { loop = false } = {}) {
   let timer = null;
 
   return {
@@ -25,11 +25,19 @@ export function createReplaySource(geo, name) {
       }
 
       const speed = script.speed ?? 1;
-      const t0 = Date.now();
-      const activated = new Set();
+      let t0 = Date.now();
+      let activated = new Set();
+      // Loop mode (?loop, for soak testing): restart the script a beat after
+      // the last alert ends, so layer churn runs indefinitely.
+      const scriptEndSec = Math.max(0, ...script.alerts.map(a => a.delaySec + a.durationSec));
 
       const tick = () => {
-        const elapsed = ((Date.now() - t0) / 1000) * speed;
+        let elapsed = ((Date.now() - t0) / 1000) * speed;
+        if (loop && elapsed > scriptEndSec + 10) {
+          t0 = Date.now();
+          activated = new Set();
+          elapsed = 0;
+        }
         const active = [];
         const added = [];
 

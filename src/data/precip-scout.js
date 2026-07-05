@@ -38,8 +38,11 @@ function loadTile(url) {
   return new Promise(resolve => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
+    // Settle no matter what — a hung image must not strand the scan's
+    // Promise.all on a 24/7 page.
+    const timeout = setTimeout(() => { img.src = ''; resolve(null); }, 30_000);
+    img.onload = () => { clearTimeout(timeout); resolve(img); };
+    img.onerror = () => { clearTimeout(timeout); resolve(null); };
     img.src = url;
   });
 }

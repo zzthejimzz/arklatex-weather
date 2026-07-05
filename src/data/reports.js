@@ -6,6 +6,8 @@
 // than any polygon. We keep the last few hours on the map and hand the
 // director a short list of tour-worthy ones (recent + significant).
 import { pointInGeometry } from '../utils/geometry.js';
+import { fetchWithTimeout } from '../utils/net.js';
+import { track } from '../utils/health.js';
 
 const LSR_URL = 'https://mesonet.agron.iastate.edu/geojson/lsr.geojson?hours=3&states=AR,LA,TX,OK';
 const POLL_MS = 2 * 60 * 1000;
@@ -88,17 +90,21 @@ export function pickTourReports(reports, max = TOUR_MAX) {
     .slice(0, max);
 }
 
+const SEEN_TTL_MS = 24 * 60 * 60 * 1000; // don't grow forever on a 24/7 page
+
 export function createReportsSource(geo) {
   const hull = geo?.hull ? { type: 'Polygon', coordinates: [geo.hull] } : null;
-  const seen = new Set();
+  const seen = new Map(); // id → last time it appeared in the feed
   let first = true;
   let timer = null;
+  const beat = track('reports', { pollMs: POLL_MS });
 
   return {
     start(onUpdate) {
       const poll = async () => {
+        beat.attempt();
         try {
-          const res = await fetch(LSR_URL);
+          const res = await fetchWithTimeout(LSR_URL);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
 
@@ -110,10 +116,13 @@ export function createReportsSource(geo) {
 
           // Same first-poll suppression as alerts: booting mid-event shouldn't
           // mark three hours of backlog as "new".
+          const now = Date.now();
           const added = first ? [] : reports.filter(r => !seen.has(r.id));
-          for (const r of reports) seen.add(r.id);
+          for (const r of reports) seen.set(r.id, now);
+          for (const [id, at] of seen) if (now - at > SEEN_TTL_MS) seen.delete(id);
           first = false;
 
+          beat.ok();
           onUpdate({ reports, added });
         } catch (err) {
           console.error('[reports] LSR poll failed:', err);

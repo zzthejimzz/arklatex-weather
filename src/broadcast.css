@@ -320,6 +320,11 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 }
 #mode-chip.replay .live-dot { background: var(--accent-purple); animation: none; }
 #mode-chip .mode-label { color: var(--text-primary); font-weight: 700; letter-spacing: 0.08em; }
+/* Data-staleness state: subtle amber, not an alarm — but never present old
+   data as live. Driven by ui/status-chip.js off the health registry. */
+#mode-chip .stale-text { color: #f59e0b; }
+#mode-chip.stale { border-color: rgba(245, 158, 11, 0.55); }
+#mode-chip.stale .live-dot { background: #f59e0b; animation: none; }
 
 /* ─── Map layer styling ─────────────────────────────────────────────── */
 .leaflet-container { background: var(--bg-base); font-family: var(--font-sans); }

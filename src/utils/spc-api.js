@@ -2,6 +2,8 @@
 // cache entries expire after 15 minutes (outlooks are reissued several times a
 // day), and the prod path still assumes a proxy.php-style host — Phase 1 runs
 // under `npm run dev` where vite.config.js proxies /api/spc*.
+import { fetchWithTimeout } from './net.js';
+
 const IS_DEV = import.meta.env.DEV;
 
 const SPC_OUTLOOK  = 'https://www.spc.noaa.gov/products/outlook';
@@ -45,7 +47,7 @@ export async function fetchOutlook(day, hazard = 'cat') {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
 
-  const res = await fetch(buildUrl(entry.base, file));
+  const res = await fetchWithTimeout(buildUrl(entry.base, file));
   if (!res.ok) throw new Error(`SPC ${day}: HTTP ${res.status}`);
 
   const data = await res.json();

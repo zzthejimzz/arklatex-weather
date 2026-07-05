@@ -1,0 +1,124 @@
+{
+ "name": "Loop smoke test \u2014 two short warnings, wraps every ~70 s (soak/loop testing)",
+ "speed": 1,
+ "alerts": [
+  {
+   "delaySec": 5,
+   "durationSec": 40,
+   "feature": {
+    "type": "Feature",
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -95.65,
+        32.1
+       ],
+       [
+        -95.05,
+        32.25
+       ],
+       [
+        -95.15,
+        32.62
+       ],
+       [
+        -95.75,
+        32.47
+       ],
+       [
+        -95.65,
+        32.1
+       ]
+      ]
+     ]
+    },
+    "properties": {
+     "id": "demo-svr-tyler",
+     "event": "Severe Thunderstorm Warning",
+     "headline": "Severe Thunderstorm Warning for Smith County TX",
+     "description": "At 512 PM CDT, a severe thunderstorm was located near Tyler, moving northeast at 35 mph. Quarter size hail and 60 mph wind gusts.",
+     "severity": "Severe",
+     "certainty": "Observed",
+     "urgency": "Immediate",
+     "areaDesc": "Smith, TX",
+     "geocode": {
+      "UGC": [
+       "TXC423"
+      ]
+     },
+     "parameters": {
+      "maxHailSize": [
+       "1.00"
+      ],
+      "maxWindGust": [
+       "60 MPH"
+      ]
+     }
+    }
+   }
+  },
+  {
+   "delaySec": 15,
+   "durationSec": 45,
+   "feature": {
+    "type": "Feature",
+    "geometry": {
+     "type": "Polygon",
+     "coordinates": [
+      [
+       [
+        -94.1,
+        32.45
+       ],
+       [
+        -93.55,
+        32.55
+       ],
+       [
+        -93.65,
+        32.9
+       ],
+       [
+        -94.2,
+        32.8
+       ],
+       [
+        -94.1,
+        32.45
+       ]
+      ]
+     ]
+    },
+    "properties": {
+     "id": "demo-tor-shreveport",
+     "event": "Tornado Warning",
+     "headline": "Tornado Warning for Caddo and Bossier Parishes LA",
+     "description": "At 530 PM CDT, a severe thunderstorm capable of producing a tornado was located 10 miles northwest of Shreveport, moving east at 40 mph.",
+     "severity": "Extreme",
+     "certainty": "Likely",
+     "urgency": "Immediate",
+     "areaDesc": "Caddo, LA; Bossier, LA",
+     "geocode": {
+      "UGC": [
+       "LAC017",
+       "LAC015"
+      ]
+     },
+     "parameters": {
+      "tornadoDetection": [
+       "RADAR INDICATED"
+      ],
+      "maxHailSize": [
+       "1.00"
+      ],
+      "maxWindGust": [
+       "70 MPH"
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

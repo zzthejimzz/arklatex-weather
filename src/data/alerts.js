@@ -4,6 +4,7 @@ import { geometriesIntersect, geometryBounds } from '../utils/geometry.js';
 import { scoreAlert } from '../director/scoring.js';
 import { styleForEvent } from '../utils/alert-style.js';
 import { populationIn } from './population.js';
+import { fetchWithTimeout } from '../utils/net.js';
 
 const ALERTS_URL = 'https://api.weather.gov/alerts/active?status=actual&area=AR,LA,TX,OK';
 const POLL_MS = 30_000;
@@ -99,7 +100,7 @@ export function createLiveSource(geo) {
     start(onUpdate, onStatus = () => {}) {
       const poll = async () => {
         try {
-          const res = await fetch(ALERTS_URL, { headers: { Accept: 'application/geo+json' } });
+          const res = await fetchWithTimeout(ALERTS_URL, { headers: { Accept: 'application/geo+json' } });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
 

@@ -13,6 +13,7 @@
 import L from 'leaflet';
 import { boundsToLeaflet, pointInGeometry } from '../utils/geometry.js';
 import { isTourable } from './scoring.js';
+import { track } from '../utils/health.js';
 
 const TOUR_DWELL_MS = 25_000;
 const OVERVIEW_DWELL_MS = 30_000;
@@ -308,9 +309,20 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   }
 
   function boot() {
+    // The director tick is the camera's pulse — if it dies the stream freezes
+    // on one shot forever. Critical: the watchdog reloads on silence.
+    const beat = track('director', { pollMs: 1000, critical: true });
     dwellUntil = 0;
     setInterval(() => {
-      if (Date.now() >= dwellUntil) advance();
+      try {
+        if (Date.now() >= dwellUntil) advance();
+        beat.ok();
+      } catch (err) {
+        // dwellUntil is still in the past, so next tick retries; the heartbeat
+        // is withheld, so a *persistent* throw trips the watchdog reload
+        // instead of freezing the camera forever.
+        console.error('[director] advance failed:', err);
+      }
     }, 1000);
   }
 

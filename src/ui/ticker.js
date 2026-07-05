@@ -7,6 +7,7 @@ import { formatLocalTime } from '../utils/time.js';
 import { fetchOutlook } from '../utils/spc-api.js';
 import { CATEGORICAL, normalizeLabel } from '../utils/map-colors.js';
 import { geometriesIntersect } from '../utils/geometry.js';
+import { fetchWithTimeout } from '../utils/net.js';
 
 const STATIONS = [
   ['Shreveport', 'KSHV'],
@@ -80,7 +81,7 @@ export function createTicker(el, geo) {
   async function refreshObs() {
     for (const [city, id] of STATIONS) {
       try {
-        const res = await fetch(`https://api.weather.gov/stations/${id}/observations/latest`, {
+        const res = await fetchWithTimeout(`https://api.weather.gov/stations/${id}/observations/latest`, {
           headers: { Accept: 'application/geo+json' },
         });
         if (!res.ok) continue;

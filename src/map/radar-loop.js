@@ -10,6 +10,7 @@
 // for light rain, near-solid cores. Frames crossfade instead of hard-cutting.
 import L from 'leaflet';
 import { renderRadarTile, blurRadiusForZoom } from './radar-render.js';
+import { track } from '../utils/health.js';
 
 const BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913';
 const OFFSETS = ['-m30m', '-m25m', '-m20m', '-m15m', '-m10m', '-m05m', '']; // oldest → newest
@@ -26,15 +27,33 @@ const MAX_ZOOM = 14; // IEM serves n0q tiles through z14 (verified)
 // dedupes in-flight fetches and skips re-decodes when the camera pans back.
 const imgCache = new Map(); // url → Promise<HTMLImageElement>
 const IMG_CACHE_MAX = 900;
+const IMG_SETTLE_MS = 30_000; // an Image that never fires load/error would pin a pending promise in the cache forever
+
+// Freshness heartbeat for the status chip: every successfully loaded tile
+// proves IEM is reachable. Silence for many minutes = radar outage on air.
+const tileBeat = track('radar-tiles', { pollMs: REFRESH_MS });
+
+export const radarCacheSize = () => imgCache.size; // soak-test hook
 
 function loadImage(url) {
   let p = imgCache.get(url);
   if (p) return p;
+  tileBeat.attempt();
   p = new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
+    const timeout = setTimeout(() => {
+      imgCache.delete(url);
+      img.src = ''; // stop the load
+      reject(new Error('tile load timeout'));
+    }, IMG_SETTLE_MS);
+    img.onload = () => {
+      clearTimeout(timeout);
+      tileBeat.ok();
+      resolve(img);
+    };
     img.onerror = (e) => {
+      clearTimeout(timeout);
       imgCache.delete(url); // failures aren't sticky — a retry may succeed
       reject(e);
     };
@@ -166,7 +185,11 @@ export function createRadarLoop(map) {
     nextAt = Date.now() + (idx === frames.length - 1 ? HOLD_NEWEST_MS : FRAME_MS);
   }, 100);
 
+  // If this loop dies the map keeps animating the same aging frames — the
+  // "screensaver of stale data" failure. Critical: the watchdog reloads on it.
+  const refreshBeat = track('radar-refresh', { pollMs: REFRESH_MS, critical: true });
   setInterval(() => {
+    refreshBeat.ok();
     ts = Date.now();
     imgCache.clear(); // URLs just changed — everything cached is stale
     frames.forEach((f, i) => f.setUrl(url(i, ts)));

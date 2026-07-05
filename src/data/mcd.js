@@ -6,6 +6,8 @@
 // The geojson alone gives us the polygon, MCD number, the "concerning" tag
 // (e.g. an in-effect watch) and IEM's parsed watch-issuance probability.
 import { geometriesIntersect, geometryBounds } from '../utils/geometry.js';
+import { fetchWithTimeout } from '../utils/net.js';
+import { track } from '../utils/health.js';
 
 const MCD_URL = 'https://mesonet.agron.iastate.edu/api/1/nws/spc_mcd.geojson';
 const TEXT_URL = id => `https://mesonet.agron.iastate.edu/api/1/nwstext/${encodeURIComponent(id)}`;
@@ -61,16 +63,25 @@ export function createMcdSource(geo) {
   let first = true;
   let timer = null;
   let warned = false;
+  const beat = track('mcd', { pollMs: POLL_MS });
 
   async function loadText(id) {
     if (!id) return {};
     if (textCache.has(id)) return textCache.get(id);
     try {
-      const res = await fetch(TEXT_URL(id));
+      const res = await fetchWithTimeout(TEXT_URL(id));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const text = await res.text();
       const parsed = { areas: section(text, 'Areas affected'), summary: section(text, 'SUMMARY') };
       textCache.set(id, parsed);
+      // MCDs valid at once are few, but a 24/7 page sees every issuance —
+      // drop the oldest entries rather than growing forever.
+      if (textCache.size > 100) {
+        for (const k of textCache.keys()) {
+          textCache.delete(k);
+          if (textCache.size <= 80) break;
+        }
+      }
       return parsed;
     } catch {
       return {}; // card still works without the narrative
@@ -80,8 +91,9 @@ export function createMcdSource(geo) {
   return {
     start(onUpdate) {
       const poll = async () => {
+        beat.attempt();
         try {
-          const res = await fetch(MCD_URL);
+          const res = await fetchWithTimeout(MCD_URL);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
 
@@ -99,6 +111,7 @@ export function createMcdSource(geo) {
           for (const m of mcds) seen.add(m.key);
           first = false;
 
+          beat.ok();
           onUpdate({ mcds, added });
         } catch (err) {
           if (!warned) {

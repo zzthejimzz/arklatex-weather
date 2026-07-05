@@ -21,6 +21,10 @@ import { createReplaySource } from './data/replay.js';
 import { loadPopulationGrid } from './data/population.js';
 import { createPrecipScout } from './data/precip-scout.js';
 import { boundsToLeaflet } from './utils/geometry.js';
+import { track, startWatchdog } from './utils/health.js';
+import { createStatusChip } from './ui/status-chip.js';
+import { startSoakMonitor } from './utils/soak.js';
+import { radarCacheSize } from './map/radar-loop.js';
 
 const STAGE_W = 1920;
 const STAGE_H = 1080;
@@ -75,8 +79,11 @@ async function boot() {
     root: document.getElementById('forecast-root'), map, forecasts,
   });
 
-  const replayName = new URLSearchParams(location.search).get('replay');
-  const source = replayName ? createReplaySource(geo, replayName) : createLiveSource(geo);
+  const params = new URLSearchParams(location.search);
+  const replayName = params.get('replay');
+  const source = replayName
+    ? createReplaySource(geo, replayName, { loop: params.has('loop') })
+    : createLiveSource(geo);
 
   // Local Storm Reports (ground truth pins + director tour stops). Live only —
   // current real-world reports would be incongruent over a replayed outbreak.
@@ -115,17 +122,13 @@ async function boot() {
     radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed,
   });
 
-  const chip = document.getElementById('mode-chip');
-  chip.classList.toggle('replay', !!replayName);
-  const renderChip = (status) => {
-    const at = status?.at ? new Date(status.at).toLocaleTimeString() : '—';
-    const state = status?.ok === false ? ' · <span style="color:#f59e0b">retrying</span>' : '';
-    chip.innerHTML = `
-      <span class="live-dot"></span>
-      <span class="mode-label">${source.mode}</span>
-      <span>data ${at}${state}</span>`;
-  };
-  renderChip(null);
+  // The chip renders itself from the health registry on its own clock — a
+  // dead poll loop can't freeze it at a reassuring old timestamp.
+  createStatusChip(document.getElementById('mode-chip'), source.mode);
+
+  // Alert freshness feeds the chip and (critical) the watchdog reload. Wired
+  // through onStatus so live and replay sources are covered identically.
+  const alertsBeat = track('alerts', { pollMs: 30_000, critical: true });
 
   source.start(
     update => {
@@ -134,13 +137,17 @@ async function boot() {
       ticker.setAlerts(update.alerts);
       director.onAlerts(update);
     },
-    status => renderChip(status),
+    status => (status.ok ? alertsBeat.ok() : alertsBeat.attempt()),
   );
+
+  startWatchdog();
+  if (params.has('soak')) {
+    startSoakMonitor({ map, extras: { imgCache: radarCacheSize } });
+  }
 
   // Dev-only: ?cam=lat,lon,zoom parks the camera and skips the director —
   // for checking framing / label collision at arbitrary zooms. ?panel forces
   // the forecast panel open as soon as its data arrives.
-  const params = new URLSearchParams(location.search);
   const cam = params.get('cam');
   if (cam) {
     const [lat, lon, z] = cam.split(',').map(Number);

@@ -11,6 +11,9 @@ const CITIES = [
   { name: 'Lufkin',     state: 'TX',    lat: 31.338, lon: -94.729 },
 ];
 
+import { fetchWithTimeout } from '../utils/net.js';
+import { track } from '../utils/health.js';
+
 const REFRESH_MS = 30 * 60_000;
 const RETRY_MS = 5 * 60_000;
 
@@ -68,9 +71,10 @@ export function createCityForecasts() {
   const gridUrls = new Map();
   let latest = null;
   let timer = null;
+  const beat = track('forecast', { pollMs: REFRESH_MS });
 
   async function fetchJson(url) {
-    const res = await fetch(url, { headers: { Accept: 'application/geo+json' } });
+    const res = await fetchWithTimeout(url, { headers: { Accept: 'application/geo+json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
     return res.json();
   }
@@ -85,6 +89,7 @@ export function createCityForecasts() {
   }
 
   async function refresh() {
+    beat.attempt();
     const results = await Promise.allSettled(CITIES.map(forecastFor));
     const failed = results.filter(r => r.status === 'rejected');
     for (const f of failed) console.error('[forecast]', f.reason);
@@ -95,7 +100,7 @@ export function createCityForecasts() {
     // Keep stale-but-complete data over a partial refresh; the panel only
     // airs when most of the board resolved.
     const ok = cities.length >= 4;
-    if (ok) latest = { cities, at: Date.now() };
+    if (ok) { latest = { cities, at: Date.now() }; beat.ok(); }
     timer = setTimeout(refresh, ok ? REFRESH_MS : RETRY_MS);
   }
 
