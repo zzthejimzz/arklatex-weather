@@ -54,6 +54,9 @@
       ],
       "maxWindGust": [
        "60 MPH"
+      ],
+      "eventMotionDescription": [
+       "2026-07-05T17:00:00-00:00...storm...250DEG...35KT...32.25,-95.63"
       ]
      }
     }
@@ -115,6 +118,9 @@
       ],
       "maxWindGust": [
        "70 MPH"
+      ],
+      "eventMotionDescription": [
+       "2026-07-05T17:00:00-00:00...storm...255DEG...40KT...32.55,-93.95"
       ]
      }
     }

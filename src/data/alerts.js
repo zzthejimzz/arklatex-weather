@@ -5,6 +5,7 @@ import { scoreAlert } from '../director/scoring.js';
 import { styleForEvent } from '../utils/alert-style.js';
 import { populationIn } from './population.js';
 import { fetchWithTimeout } from '../utils/net.js';
+import { parseMotion } from '../utils/storm-motion.js';
 
 const ALERTS_URL = 'https://api.weather.gov/alerts/active?status=actual&area=AR,LA,TX,OK';
 const POLL_MS = 30_000;
@@ -75,6 +76,7 @@ export function enrichAlert(feature, geo) {
     style: styleForEvent(props.event),
     score: scoreAlert(props),
     population: geometry ? populationIn(geometry) : null,
+    motion: parseMotion(props),
     states,
   };
 }

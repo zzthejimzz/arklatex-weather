@@ -3,6 +3,7 @@
 import { param } from '../director/scoring.js';
 import { formatPopulation } from '../data/population.js';
 import { formatLocalTime, countdown } from '../utils/time.js';
+import { compass8, townsInPath } from '../utils/storm-motion.js';
 import { MCD_COLOR } from '../map/mcd-layer.js';
 
 const STATE_NAMES = { TX: 'Texas', LA: 'Louisiana', AR: 'Arkansas', OK: 'Oklahoma' };
@@ -39,10 +40,24 @@ export function createPopup(root) {
     const gust = param(p, 'maxWindGust');
     if (gust) rows.push(row('💨', 'Max wind', /mph/i.test(gust) ? gust.toLowerCase() : `${gust} mph`));
 
+    if (alert.motion) {
+      rows.push(row('🧭', 'Moving', `${compass8(alert.motion.toDeg)} at ${alert.motion.speedMph} mph`));
+    }
+
     const pop = alert.population > 0 ? formatPopulation(alert.population) : null;
     if (pop) rows.push(row('👥', 'In path', `~${pop} people`));
 
     rows.push(row('🕐', 'Issued', formatLocalTime(p.sent)));
+
+    // "Towns in the path" — the local-TV money line. ETAs are absolute
+    // times, so the block stays honest between re-renders; it's recomputed
+    // on every tour visit and every CON/EXT update.
+    const towns = townsInPath(alert.motion);
+    const pathHtml = towns.length
+      ? `<div class="warn-card-path">${towns.map(t =>
+          `<span class="path-town"><b>${t.name}</b> ${t.nearNow ? 'now' : `~${formatLocalTime(new Date(t.etaMs).toISOString())}`}</span>`,
+        ).join(' <span class="path-sep">▸</span> ')}</div>`
+      : '';
 
     const states = alert.states.map(s => STATE_NAMES[s] ?? s).join(' · ');
     const areas = (p.areaDesc ?? '').split(';').map(s => s.trim()).filter(Boolean);
@@ -56,6 +71,7 @@ export function createPopup(root) {
         </div>
         <div class="warn-card-area">${areaText}<br><span class="states">${states}</span></div>
         <div class="warn-card-rows">${rows.join('')}</div>
+        ${pathHtml}
       </div>`;
   }
 

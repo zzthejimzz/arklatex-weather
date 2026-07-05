@@ -295,6 +295,16 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   color: var(--text-muted); text-transform: uppercase;
   margin-bottom: 6px;
 }
+/* "Towns in the path" strip — storm-motion ETAs under the warning rows */
+.warn-card-path {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+  font-size: 16px; line-height: 1.5; color: var(--text-muted);
+}
+.warn-card-path .path-town { white-space: nowrap; } /* never split a town from its ETA */
+.warn-card-path .path-town b { color: var(--text-primary); font-weight: 700; }
+.warn-card-path .path-sep { color: var(--alert-color, #9bb0d3); margin: 0 4px; }
+
 .warn-card-remark {
   margin-top: 12px; padding-top: 10px;
   border-top: 1px solid var(--border-light);

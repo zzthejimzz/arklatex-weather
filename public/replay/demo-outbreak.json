@@ -1,5 +1,5 @@
 {
-  "name": "Demo outbreak — staged ArkLaTex severe weather event",
+  "name": "Demo outbreak \u00e2\u20ac\u201d staged ArkLaTex severe weather event",
   "speed": 1,
   "alerts": [
     {
@@ -17,7 +17,18 @@
           "certainty": "Likely",
           "urgency": "Expected",
           "areaDesc": "Caddo; Bossier; Webster; Gregg; Harrison; Marion; Cass; Miller",
-          "geocode": { "UGC": ["LAC017", "LAC015", "LAC119", "TXC183", "TXC203", "TXC315", "TXC067", "ARC091"] },
+          "geocode": {
+            "UGC": [
+              "LAC017",
+              "LAC015",
+              "LAC119",
+              "TXC183",
+              "TXC203",
+              "TXC315",
+              "TXC067",
+              "ARC091"
+            ]
+          },
           "parameters": {}
         }
       }
@@ -29,7 +40,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-95.65, 32.10], [-95.05, 32.25], [-95.15, 32.62], [-95.75, 32.47], [-95.65, 32.10]]]
+          "coordinates": [
+            [
+              [
+                -95.65,
+                32.1
+              ],
+              [
+                -95.05,
+                32.25
+              ],
+              [
+                -95.15,
+                32.62
+              ],
+              [
+                -95.75,
+                32.47
+              ],
+              [
+                -95.65,
+                32.1
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-svr-tyler",
@@ -40,10 +74,21 @@
           "certainty": "Observed",
           "urgency": "Immediate",
           "areaDesc": "Smith, TX",
-          "geocode": { "UGC": ["TXC423"] },
+          "geocode": {
+            "UGC": [
+              "TXC423"
+            ]
+          },
           "parameters": {
-            "maxHailSize": ["1.00"],
-            "maxWindGust": ["60 MPH"]
+            "maxHailSize": [
+              "1.00"
+            ],
+            "maxWindGust": [
+              "60 MPH"
+            ],
+            "eventMotionDescription": [
+              "2026-07-05T17:00:00-00:00...storm...250DEG...35KT...32.25,-95.63"
+            ]
           }
         }
       }
@@ -55,7 +100,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-94.10, 32.45], [-93.55, 32.55], [-93.65, 32.90], [-94.20, 32.80], [-94.10, 32.45]]]
+          "coordinates": [
+            [
+              [
+                -94.1,
+                32.45
+              ],
+              [
+                -93.55,
+                32.55
+              ],
+              [
+                -93.65,
+                32.9
+              ],
+              [
+                -94.2,
+                32.8
+              ],
+              [
+                -94.1,
+                32.45
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-tor-shreveport",
@@ -66,11 +134,25 @@
           "certainty": "Likely",
           "urgency": "Immediate",
           "areaDesc": "Caddo, LA; Bossier, LA",
-          "geocode": { "UGC": ["LAC017", "LAC015"] },
+          "geocode": {
+            "UGC": [
+              "LAC017",
+              "LAC015"
+            ]
+          },
           "parameters": {
-            "tornadoDetection": ["RADAR INDICATED"],
-            "maxHailSize": ["1.00"],
-            "maxWindGust": ["70 MPH"]
+            "tornadoDetection": [
+              "RADAR INDICATED"
+            ],
+            "maxHailSize": [
+              "1.00"
+            ],
+            "maxWindGust": [
+              "70 MPH"
+            ],
+            "eventMotionDescription": [
+              "2026-07-05T17:00:00-00:00...storm...255DEG...40KT...32.55,-93.95"
+            ]
           }
         }
       }
@@ -82,7 +164,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-94.95, 32.35], [-94.25, 32.45], [-94.35, 32.75], [-95.05, 32.65], [-94.95, 32.35]]]
+          "coordinates": [
+            [
+              [
+                -94.95,
+                32.35
+              ],
+              [
+                -94.25,
+                32.45
+              ],
+              [
+                -94.35,
+                32.75
+              ],
+              [
+                -95.05,
+                32.65
+              ],
+              [
+                -94.95,
+                32.35
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-svr-longview",
@@ -93,11 +198,25 @@
           "certainty": "Observed",
           "urgency": "Immediate",
           "areaDesc": "Gregg, TX; Harrison, TX",
-          "geocode": { "UGC": ["TXC183", "TXC203"] },
+          "geocode": {
+            "UGC": [
+              "TXC183",
+              "TXC203"
+            ]
+          },
           "parameters": {
-            "thunderstormDamageThreat": ["CONSIDERABLE"],
-            "maxHailSize": ["1.75"],
-            "maxWindGust": ["70 MPH"]
+            "thunderstormDamageThreat": [
+              "CONSIDERABLE"
+            ],
+            "maxHailSize": [
+              "1.75"
+            ],
+            "maxWindGust": [
+              "70 MPH"
+            ],
+            "eventMotionDescription": [
+              "2026-07-05T17:00:00-00:00...storm...250DEG...35KT...32.45,-94.89"
+            ]
           }
         }
       }
@@ -109,7 +228,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-94.30, 33.25], [-93.75, 33.35], [-93.85, 33.70], [-94.40, 33.60], [-94.30, 33.25]]]
+          "coordinates": [
+            [
+              [
+                -94.3,
+                33.25
+              ],
+              [
+                -93.75,
+                33.35
+              ],
+              [
+                -93.85,
+                33.7
+              ],
+              [
+                -94.4,
+                33.6
+              ],
+              [
+                -94.3,
+                33.25
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-ffw-texarkana",
@@ -120,7 +262,12 @@
           "certainty": "Likely",
           "urgency": "Immediate",
           "areaDesc": "Miller, AR; Bowie, TX",
-          "geocode": { "UGC": ["ARC091", "TXC037"] },
+          "geocode": {
+            "UGC": [
+              "ARC091",
+              "TXC037"
+            ]
+          },
           "parameters": {}
         }
       }
@@ -132,7 +279,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-94.60, 32.40], [-94.15, 32.50], [-94.25, 32.80], [-94.70, 32.70], [-94.60, 32.40]]]
+          "coordinates": [
+            [
+              [
+                -94.6,
+                32.4
+              ],
+              [
+                -94.15,
+                32.5
+              ],
+              [
+                -94.25,
+                32.8
+              ],
+              [
+                -94.7,
+                32.7
+              ],
+              [
+                -94.6,
+                32.4
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-tor-marshall",
@@ -143,12 +313,28 @@
           "certainty": "Observed",
           "urgency": "Immediate",
           "areaDesc": "Harrison, TX; Marion, TX",
-          "geocode": { "UGC": ["TXC203", "TXC315"] },
+          "geocode": {
+            "UGC": [
+              "TXC203",
+              "TXC315"
+            ]
+          },
           "parameters": {
-            "tornadoDetection": ["OBSERVED"],
-            "tornadoDamageThreat": ["CONSIDERABLE"],
-            "maxHailSize": ["2.00"],
-            "maxWindGust": ["80 MPH"]
+            "tornadoDetection": [
+              "OBSERVED"
+            ],
+            "tornadoDamageThreat": [
+              "CONSIDERABLE"
+            ],
+            "maxHailSize": [
+              "2.00"
+            ],
+            "maxWindGust": [
+              "80 MPH"
+            ],
+            "eventMotionDescription": [
+              "2026-07-05T17:00:00-00:00...storm...250DEG...35KT...32.50,-94.64"
+            ]
           }
         }
       }
@@ -160,7 +346,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-95.05, 31.20], [-94.35, 31.30], [-94.45, 31.75], [-95.15, 31.65], [-95.05, 31.20]]]
+          "coordinates": [
+            [
+              [
+                -95.05,
+                31.2
+              ],
+              [
+                -94.35,
+                31.3
+              ],
+              [
+                -94.45,
+                31.75
+              ],
+              [
+                -95.15,
+                31.65
+              ],
+              [
+                -95.05,
+                31.2
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-svr-lufkin",
@@ -171,11 +380,25 @@
           "certainty": "Observed",
           "urgency": "Immediate",
           "areaDesc": "Angelina, TX; Nacogdoches, TX",
-          "geocode": { "UGC": ["TXC005", "TXC347"] },
+          "geocode": {
+            "UGC": [
+              "TXC005",
+              "TXC347"
+            ]
+          },
           "parameters": {
-            "thunderstormDamageThreat": ["DESTRUCTIVE"],
-            "maxHailSize": ["1.00"],
-            "maxWindGust": ["80 MPH"]
+            "thunderstormDamageThreat": [
+              "DESTRUCTIVE"
+            ],
+            "maxHailSize": [
+              "1.00"
+            ],
+            "maxWindGust": [
+              "80 MPH"
+            ],
+            "eventMotionDescription": [
+              "2026-07-05T17:00:00-00:00...storm...250DEG...35KT...31.36,-94.99"
+            ]
           }
         }
       }
@@ -187,7 +410,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-95.10, 33.75], [-94.55, 33.85], [-94.65, 34.15], [-95.20, 34.05], [-95.10, 33.75]]]
+          "coordinates": [
+            [
+              [
+                -95.1,
+                33.75
+              ],
+              [
+                -94.55,
+                33.85
+              ],
+              [
+                -94.65,
+                34.15
+              ],
+              [
+                -95.2,
+                34.05
+              ],
+              [
+                -95.1,
+                33.75
+              ]
+            ]
+          ]
         },
         "properties": {
           "id": "demo-tor-emergency-idabel",
@@ -198,12 +444,27 @@
           "certainty": "Observed",
           "urgency": "Immediate",
           "areaDesc": "McCurtain, OK",
-          "geocode": { "UGC": ["OKC089"] },
+          "geocode": {
+            "UGC": [
+              "OKC089"
+            ]
+          },
           "parameters": {
-            "tornadoDetection": ["OBSERVED"],
-            "tornadoDamageThreat": ["CATASTROPHIC"],
-            "maxHailSize": ["3.00"],
-            "maxWindGust": ["90 MPH"]
+            "tornadoDetection": [
+              "OBSERVED"
+            ],
+            "tornadoDamageThreat": [
+              "CATASTROPHIC"
+            ],
+            "maxHailSize": [
+              "3.00"
+            ],
+            "maxWindGust": [
+              "90 MPH"
+            ],
+            "eventMotionDescription": [
+              "2026-07-05T17:00:00-00:00...storm...250DEG...35KT...33.85,-95.10"
+            ]
           }
         }
       }
@@ -217,7 +478,30 @@
         "type": "Feature",
         "geometry": {
           "type": "Polygon",
-          "coordinates": [[[-95.60, 31.80], [-93.30, 32.05], [-93.10, 33.70], [-95.40, 33.55], [-95.60, 31.80]]]
+          "coordinates": [
+            [
+              [
+                -95.6,
+                31.8
+              ],
+              [
+                -93.3,
+                32.05
+              ],
+              [
+                -93.1,
+                33.7
+              ],
+              [
+                -95.4,
+                33.55
+              ],
+              [
+                -95.6,
+                31.8
+              ]
+            ]
+          ]
         },
         "properties": {
           "num": 1508,
