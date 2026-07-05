@@ -36,7 +36,16 @@ driving a real browser and screenshotting, never by importing modules.
 - `/?replay=loop-smoke&loop` — two warnings, wraps every ~70 s; fastest way
   to see issue → expiry → re-issue churn.
 - `/?soak` — logs one JSON memory sample per minute; `window.__soak` array.
-- `/?cam=lat,lon,zoom`, `/?lsr`, `/?mcd`, `/?panel` — dev park modes.
+- `/?cam=lat,lon,zoom`, `/?lsr`, `/?mcd`, `/?panel` (3-day board),
+  `/?panel=city` (7-day spotlight), `/?temps` (current-temps map) — dev park
+  modes.
+
+## Cleanup gotcha
+
+TaskStop kills the `npm run dev` wrapper but the vite node child survives on
+Windows and keeps its port. After stopping, kill the listener:
+`Get-NetTCPConnection -LocalPort <port> -State Listen` → `Stop-Process` (only
+if the owning process is `node`; port 5173 may be Jim's own dev server).
 
 ## Inspection hooks
 

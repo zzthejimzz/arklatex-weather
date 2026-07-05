@@ -19,6 +19,7 @@
 //   reports 470       local storm report pins
 //   cities 640        curated city labels
 //   labels 650        vector labels (fallback: CARTO dark_only_labels)
+//   temps 660         current-temperature chips (temps map mode only)
 import L from 'leaflet';
 import { addVectorBasemap } from './vector-basemap.js';
 
@@ -35,6 +36,7 @@ const PANES = {
   reports: 470,
   cities: 640,
   labels: 650,
+  temps: 660,
 };
 
 export function createBroadcastMap(el, bbox) {

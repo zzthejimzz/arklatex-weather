@@ -7,12 +7,14 @@ import { createOutlookLayer } from './map/outlook-layer.js';
 import { createAlertsLayer } from './map/alerts-layer.js';
 import { createReportsLayer } from './map/reports-layer.js';
 import { createMcdLayer } from './map/mcd-layer.js';
+import { createTempsLayer } from './map/temps-layer.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
 import { createTicker } from './ui/ticker.js';
 import { createForecastPanel } from './ui/forecast-panel.js';
 import { createCityForecasts } from './data/forecast.js';
+import { createObservationsSource } from './data/observations.js';
 import { createDirector } from './director/director.js';
 import { createLiveSource } from './data/alerts.js';
 import { createReportsSource, pickTourReports } from './data/reports.js';
@@ -70,8 +72,14 @@ async function boot() {
   const alertsLayer = createAlertsLayer(map);
   const banner = createBanner(document.getElementById('banner'));
   const popup = createPopup(document.getElementById('popup-root'));
-  const ticker = createTicker(document.getElementById('ticker'), geo);
   const precipScout = createPrecipScout(geo);
+
+  // Shared surface observations: the ticker's temp strip and the director's
+  // current-temps map mode read the same feed.
+  const obsSource = createObservationsSource();
+  obsSource.start();
+  const ticker = createTicker(document.getElementById('ticker'), geo, obsSource);
+  const tempsLayer = createTempsLayer(map);
 
   const forecasts = createCityForecasts();
   forecasts.start();
@@ -119,7 +127,7 @@ async function boot() {
   const regionBounds = L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(0.04);
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
-    radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed,
+    radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -174,11 +182,24 @@ async function boot() {
       mcdLayer.highlight(m.key);
       popup.showMcd(m);
     }, 500);
+  } else if (params.has('temps')) {
+    // Dev-only: park wide with the current-temps chips as soon as obs arrive.
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const obs = obsSource.get();
+      if (obs.length < 5) return;
+      clearInterval(t);
+      tempsLayer.show(obs);
+    }, 500);
   } else {
     director.boot();
   }
   if (params.has('panel')) {
-    const t = setInterval(() => { if (forecastPanel.show()) clearInterval(t); }, 500);
+    // ?panel forces the 3-day board; ?panel=city forces the 7-day spotlight.
+    const city = params.get('panel') === 'city';
+    const t = setInterval(() => {
+      if (city ? forecastPanel.showCity(0) : forecastPanel.show()) clearInterval(t);
+    }, 500);
   }
 }
 

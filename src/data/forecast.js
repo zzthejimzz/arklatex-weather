@@ -47,10 +47,12 @@ const pop = p => p?.probabilityOfPrecipitation?.value ?? 0;
 
 // Daytime periods anchor each card; the following night supplies the low and
 // its precip chance. Booting in the evening (first period = "Tonight") simply
-// means the first card is tomorrow.
+// means the first card is tomorrow. Keeps the full week — the 3-day board
+// slices the front, the per-city spotlight airs all seven.
+const SUMMARY_DAYS = 7;
 function summarize(periods) {
   const days = [];
-  for (let i = 0; i < periods.length && days.length < 3; i++) {
+  for (let i = 0; i < periods.length && days.length < SUMMARY_DAYS; i++) {
     const p = periods[i];
     if (!p.isDaytime) continue;
     const night = periods[i + 1] && !periods[i + 1].isDaytime ? periods[i + 1] : null;
@@ -96,7 +98,7 @@ export function createCityForecasts() {
     const cities = results
       .filter(r => r.status === 'fulfilled')
       .map(r => r.value)
-      .filter(c => c.days.length === 3);
+      .filter(c => c.days.length >= 3); // board needs 3; spotlight airs what exists
     // Keep stale-but-complete data over a partial refresh; the panel only
     // airs when most of the board resolved.
     const ok = cities.length >= 4;

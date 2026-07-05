@@ -1,28 +1,28 @@
 // Bottom scrolling ticker. Rotating content, most urgent first:
 //   active alerts → SPC Day 1 risk for the region → live city observations →
-//   branding line. New content swaps in at the loop seam (animationiteration)
-//   so the scroll never visibly jumps. (Phase 4: now-playing music info.)
+//   sunrise/sunset almanac → branding line. New content swaps in at the loop
+//   seam (animationiteration) so the scroll never visibly jumps.
+//   (Phase 4: now-playing music info.)
 import { styleForEvent } from '../utils/alert-style.js';
 import { formatLocalTime } from '../utils/time.js';
 import { fetchOutlook } from '../utils/spc-api.js';
 import { CATEGORICAL, normalizeLabel } from '../utils/map-colors.js';
 import { geometriesIntersect } from '../utils/geometry.js';
-import { fetchWithTimeout } from '../utils/net.js';
+import { sunTimes } from '../utils/sun.js';
 
-const STATIONS = [
-  ['Shreveport', 'KSHV'],
-  ['Texarkana', 'KTXK'],
-  ['Tyler', 'KTYR'],
-  ['Longview', 'KGGG'],
-  ['Monroe', 'KMLU'],
-  ['Lufkin', 'KLFK'],
-];
+// Ticker's six anchor cities, pulled from the shared observations feed
+// (data/observations.js) — it fetches these stations plus the wider set the
+// temps map mode uses.
+const TICKER_CITIES = ['Shreveport', 'Texarkana', 'Tyler', 'Longview', 'Monroe', 'Lufkin'];
+// Almanac anchor: Shreveport. Sunrise varies under two minutes across the CWA.
+const SUN_LAT = 32.52;
+const SUN_LON = -93.75;
 const BRAND = 'ARKLATEX WEATHER LIVE · 24/7 coverage for NE Texas · NW Louisiana · SW Arkansas · SE Oklahoma';
-const OBS_MS = 10 * 60 * 1000;
+const OBS_MS = 5 * 60 * 1000; // re-read the shared feed (it polls on its own)
 const OUTLOOK_MS = 15 * 60 * 1000;
 const SCROLL_PX_PER_S = 90;
 
-export function createTicker(el, geo) {
+export function createTicker(el, geo, obsFeed) {
   el.innerHTML = `
     <div class="ticker-track">
       <div class="ticker-content"></div>
@@ -32,7 +32,6 @@ export function createTicker(el, geo) {
   const contents = el.querySelectorAll('.ticker-content');
 
   let alerts = [];
-  const obs = new Map(); // city → { tempF, windMph, desc }
   let outlookText = null;
   let pendingHtml = null;
 
@@ -51,11 +50,20 @@ export function createTicker(el, geo) {
     }
     if (outlookText) items.push(`<span class="tk-icon">⚡</span>${outlookText}`);
 
-    const obsParts = STATIONS
-      .map(([city]) => ({ city, o: obs.get(city) }))
-      .filter(({ o }) => o?.tempF != null)
-      .map(({ city, o }) => `${city} <b>${o.tempF}°</b>${o.windMph ? ` <span class="tk-dim">${o.windMph} mph</span>` : ''}`);
+    const obs = obsFeed?.get() ?? [];
+    const obsParts = TICKER_CITIES
+      .map(city => obs.find(o => o.city === city))
+      .filter(o => o?.tempF != null)
+      .map(o => `${o.city} <b>${o.tempF}°</b>${o.windMph ? ` <span class="tk-dim">${o.windMph} mph</span>` : ''}`);
     if (obsParts.length) items.push(`<span class="tk-icon">🌡️</span>${obsParts.join(' &nbsp;·&nbsp; ')}`);
+
+    const { sunrise, sunset } = sunTimes(new Date(), SUN_LAT, SUN_LON);
+    if (sunrise && sunset) {
+      items.push(
+        `<span class="tk-icon">🌅</span>Sunrise <b>${formatLocalTime(sunrise)}</b>` +
+        ` &nbsp;·&nbsp; 🌇 Sunset <b>${formatLocalTime(sunset)}</b>`,
+      );
+    }
 
     items.push(`<span class="tk-icon">📺</span>${BRAND}`);
     return items;
@@ -77,27 +85,6 @@ export function createTicker(el, geo) {
     track.style.animationDuration = `${Math.max(20, Math.round(w / SCROLL_PX_PER_S))}s`;
   }
   track.addEventListener('animationiteration', apply);
-
-  async function refreshObs() {
-    for (const [city, id] of STATIONS) {
-      try {
-        const res = await fetchWithTimeout(`https://api.weather.gov/stations/${id}/observations/latest`, {
-          headers: { Accept: 'application/geo+json' },
-        });
-        if (!res.ok) continue;
-        const p = (await res.json()).properties;
-        const t = p.temperature?.value;
-        const ws = p.windSpeed?.value;
-        const kmh = (p.windSpeed?.unitCode ?? '').includes('km_h');
-        obs.set(city, {
-          tempF: t == null ? null : Math.round((t * 9) / 5 + 32),
-          windMph: ws == null ? null : Math.round(ws * (kmh ? 0.621 : 2.237)),
-          desc: p.textDescription ?? '',
-        });
-      } catch { /* station down — skip */ }
-    }
-    rebuild();
-  }
 
   async function refreshOutlook() {
     try {
@@ -124,9 +111,8 @@ export function createTicker(el, geo) {
   }
 
   rebuild();
-  refreshObs();
   refreshOutlook();
-  setInterval(refreshObs, OBS_MS);
+  setInterval(rebuild, OBS_MS); // pick up fresh obs + roll the almanac at midnight
   setInterval(refreshOutlook, OUTLOOK_MS);
 
   return { setAlerts };

@@ -43,7 +43,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
@@ -61,6 +61,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   let rotIdx = -1;     // warning rotation position: 0 = overview, then warnings, then in-warning reports
   let idlePlan = [];
   let idleIdx = 0;
+  let spotIdx = 0; // 7-day city spotlight rotation — next city each idle cycle
 
   function onAlerts({ alerts, added }) {
     active = alerts;
@@ -170,13 +171,20 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       { type: 'outlook', day: 'day2', label: 'Day 2 Convective Outlook', dwell: busy ? 12_000 : 20_000 },
       { type: 'outlook', day: 'day3', label: 'Day 3 Convective Outlook', dwell: busy ? 12_000 : 20_000 },
     );
-    if (forecastPanel?.ready()) plan.push({ type: 'forecast', dwell: 30_000 });
+    // Quiet-day depth, in "now → next 3 days → the week" order: current
+    // temps across the region, the 3-day board, then one city's 7 days.
+    if ((obsFeed?.get() ?? []).length >= 6) plan.push({ type: 'temps', dwell: busy ? 15_000 : 22_000 });
+    if (forecastPanel?.ready()) {
+      plan.push({ type: 'forecast', dwell: 30_000 });
+      plan.push({ type: 'forecast-city', dwell: busy ? 18_000 : 25_000 });
+    }
     return plan;
   }
 
   function runIdleStep(step) {
     if (step.type !== 'report') reportsLayer?.highlight(null);
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
+    if (step.type !== 'temps') tempsLayer?.hide();
     switch (step.type) {
       case 'report': {
         outlookLayer.show('day1'); // reset from any outlook step
@@ -205,6 +213,31 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!forecastPanel?.show()) return advance();
         // show() already shrank the map + invalidateSize'd, so this fly
         // frames the region in the reduced viewport.
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'forecast-city': {
+        // Runs right after the board, so the panel is usually already open —
+        // the content swap (board → one city's week) reads as a page turn.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        if (!forecastPanel?.showCity(spotIdx++)) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'temps': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        outlookLayer.show('day1');
+        tempsLayer?.show(obsFeed?.get() ?? []);
+        showChip('🌡️ Current Temperatures<span class="sub">NWS observations</span>');
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -248,6 +281,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     touring = null;
     alertsLayer.highlight(null);
     mcdLayer?.highlight(null);
+    tempsLayer?.hide();
     forecastPanel?.hide();
     hideChip();
     reportsLayer?.highlight(live.id);
@@ -265,6 +299,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     touring = null;
     alertsLayer.highlight(null);
     reportsLayer?.highlight(null);
+    tempsLayer?.hide();
     forecastPanel?.hide();
     hideChip();
     mcdLayer?.highlight(live.key);
@@ -278,6 +313,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     hideChip();
     reportsLayer?.highlight(null);
     mcdLayer?.highlight(null);
+    tempsLayer?.hide();
     forecastPanel?.hide(); // restores full-width map before the fly is computed
     const bounds = L.latLngBounds(boundsToLeaflet(alert.bounds)).pad(0.3);
     fly(bounds, maxZoom);
@@ -293,6 +329,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     alertsLayer.highlight(null);
     reportsLayer?.highlight(null);
     mcdLayer?.highlight(null);
+    tempsLayer?.hide();
     forecastPanel?.hide();
     fly(regionBounds);
     dwellUntil = Date.now() + FLY_MS + dwell;

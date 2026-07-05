@@ -24,7 +24,21 @@ function cityRow(c) {
         <span class="fc-state">${c.state}</span>
         <span class="fc-short">${c.days[0].short}</span>
       </div>
-      ${c.days.map(dayCell).join('')}
+      ${c.days.slice(0, 3).map(dayCell).join('')}
+    </div>`;
+}
+
+// One row per day of the single-city 7-day spotlight.
+function spotRow(d) {
+  const lo = d.lo != null ? ` / <span class="lo">${d.lo}°</span>` : '';
+  const wind = d.wind >= 15 ? ` 💨 ${d.wind}` : '';
+  return `
+    <div class="fc-spot-row">
+      <div class="sr-dow">${d.dow}</div>
+      <div class="sr-ico">${d.icon}</div>
+      <div class="sr-short">${d.short}</div>
+      <div class="sr-temp"><b>${d.hi}°</b>${lo}</div>
+      <div class="sr-meta">💧 ${d.precip}%${wind}</div>
     </div>`;
 }
 
@@ -52,6 +66,25 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Single-city 7-day spotlight — same slide-in panel, one city per idle
+  // cycle (the director hands us a rotation index).
+  function showCity(idx) {
+    const data = forecasts.get();
+    if (!data?.cities.length) return false;
+    const c = data.cities[idx % data.cities.length];
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">📅 ${c.name} <span class="grad">7-Day</span></div>
+        <div class="fc-sub">${c.state} · National Weather Service · updated ${formatLocalTime(data.at)}</div>
+      </div>
+      <div class="fc-spot">${c.days.map(spotRow).join('')}</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   function hide() {
     if (!open) return;
     open = false;
@@ -60,5 +93,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, hide, ready };
+  return { show, showCity, hide, ready };
 }
