@@ -39,7 +39,7 @@ export function createPopup(root) {
     const gust = param(p, 'maxWindGust');
     if (gust) rows.push(row('💨', 'Max wind', /mph/i.test(gust) ? gust.toLowerCase() : `${gust} mph`));
 
-    const pop = formatPopulation(alert.population);
+    const pop = alert.population > 0 ? formatPopulation(alert.population) : null;
     if (pop) rows.push(row('👥', 'In path', `~${pop} people`));
 
     rows.push(row('🕐', 'Issued', formatLocalTime(p.sent)));

@@ -1,13 +1,19 @@
 // Builds the two data files the broadcast page needs:
 //   public/geo/arklatex.json         — NWS Shreveport (SHV) county + forecast-zone
 //                                      geometries, region convex hull, bbox
-//   public/geo/population-grid.json  — census tract centroids [lon, lat, pop2020]
-//                                      for those counties (TIGERweb Census2020;
-//                                      decennial API fallback for population)
+//   public/geo/population-grid.json  — [lon, lat, pop2020] points for those
+//                                      counties (TIGERweb Census2020; decennial
+//                                      API fallback for population). Each tract's
+//                                      population is spread over a ~2.5 km lattice
+//                                      clipped to the tract polygon, so small
+//                                      warning polygons still catch points —
+//                                      a single centroid per rural tract made
+//                                      storm-scale warnings sum to 0 people.
 // Run: npm run build-geo   (Node 18+, needs network)
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pointInRing } from '../src/utils/geometry.js';
 
 const OFFICE = 'SHV';
 const NWS = 'https://api.weather.gov';
@@ -137,6 +143,42 @@ async function findTractsLayerId() {
   return layer.id;
 }
 
+// Even-odd containment over a raw esri `rings` array. TIGERweb returns all
+// rings (outers and holes, possibly several parts) in one flat list; ray-cast
+// parity across every ring classifies points correctly without sorting out
+// which ring is which.
+function pointInEsriRings(pt, rings) {
+  let inside = false;
+  for (const ring of rings) if (pointInRing(pt, ring)) inside = !inside;
+  return inside;
+}
+
+// Spread one tract's population across lattice cell centers inside its rings.
+// Lattice is anchored to multiples of CELL_DEG so cells line up across tracts.
+const CELL_DEG = 0.025; // ~2.5 km N–S; warning polygons are tens of km across
+function rasterizeTract(rings, pop, fallbackPt) {
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const ring of rings) {
+    for (const [x, y] of ring) {
+      if (x < w) w = x;
+      if (x > e) e = x;
+      if (y < s) s = y;
+      if (y > n) n = y;
+    }
+  }
+  const cells = [];
+  const x0 = (Math.floor(w / CELL_DEG) + 0.5) * CELL_DEG;
+  const y0 = (Math.floor(s / CELL_DEG) + 0.5) * CELL_DEG;
+  for (let x = x0; x <= e; x += CELL_DEG) {
+    for (let y = y0; y <= n; y += CELL_DEG) {
+      if (pointInEsriRings([x, y], rings)) cells.push([x, y]);
+    }
+  }
+  if (!cells.length) cells.push(fallbackPt); // tract smaller than one cell
+  const share = Math.round((pop / cells.length) * 10) / 10;
+  return cells.map(([x, y]) => [Math.round(x * 10000) / 10000, Math.round(y * 10000) / 10000, share]);
+}
+
 async function buildPopulationGrid(countyCodes) {
   const layerId = await findTractsLayerId();
   console.log(`TIGERweb tracts layer id: ${layerId}`);
@@ -148,7 +190,7 @@ async function buildPopulationGrid(countyCodes) {
     const county = code.slice(3);
     if (!st) continue;
     const where = encodeURIComponent(`STATE='${st}' AND COUNTY='${county}'`);
-    const url = `${TIGER}/${layerId}/query?where=${where}&outFields=GEOID,POP100,CENTLAT,CENTLON&returnGeometry=false&f=json`;
+    const url = `${TIGER}/${layerId}/query?where=${where}&outFields=GEOID,POP100,CENTLAT,CENTLON&returnGeometry=true&geometryPrecision=4&outSR=4326&f=json`;
     const data = await getJson(url, 'application/json');
     for (const f of data.features ?? []) {
       const a = f.attributes;
@@ -157,8 +199,13 @@ async function buildPopulationGrid(countyCodes) {
       const pop = Number(a.POP100);
       if (isNaN(lat) || isNaN(lon)) continue;
       const pt = [Math.round(lon * 10000) / 10000, Math.round(lat * 10000) / 10000];
-      if (Number.isFinite(pop) && pop >= 0 && a.POP100 !== null) grid.push([...pt, pop]);
-      else missingPop.push({ geoid: a.GEOID, pt });
+      const rings = f.geometry?.rings ?? [];
+      if (Number.isFinite(pop) && pop >= 0 && a.POP100 !== null) {
+        if (rings.length) grid.push(...rasterizeTract(rings, pop, pt));
+        else grid.push([...pt, pop]);
+      } else {
+        missingPop.push({ geoid: a.GEOID, pt, rings });
+      }
     }
     await sleep(120);
   }
@@ -175,15 +222,17 @@ async function buildPopulationGrid(countyCodes) {
         popByGeoid.set(`${state}${county}${tract}`, Number(pop));
       }
     }
-    for (const { geoid, pt } of missingPop) {
+    for (const { geoid, pt, rings } of missingPop) {
       const pop = popByGeoid.get(geoid);
-      if (Number.isFinite(pop)) grid.push([...pt, pop]);
+      if (!Number.isFinite(pop)) continue;
+      if (rings.length) grid.push(...rasterizeTract(rings, pop, pt));
+      else grid.push([...pt, pop]);
     }
   }
 
   const total = grid.reduce((s, [, , p]) => s + p, 0);
   await fs.writeFile(path.join(outDir, 'population-grid.json'), JSON.stringify(grid));
-  console.log(`Wrote population-grid.json (${grid.length} tracts, total pop ${total.toLocaleString()})`);
+  console.log(`Wrote population-grid.json (${grid.length} points, total pop ${Math.round(total).toLocaleString()})`);
 }
 
 const zones = await fetchZones();

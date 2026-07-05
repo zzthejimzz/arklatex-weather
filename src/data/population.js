@@ -1,5 +1,6 @@
-// Population-impacted estimates: census tract centroids ([lon, lat, pop])
-// pre-baked by scripts/build-geo.js, summed by point-in-polygon at runtime.
+// Population-impacted estimates: [lon, lat, pop] points pre-baked by
+// scripts/build-geo.js (tract population spread over a ~2.5 km lattice),
+// summed by point-in-polygon at runtime. Shares are fractional — round the sum.
 import { pointInGeometry, geometryBounds } from '../utils/geometry.js';
 
 let grid = null;
@@ -24,7 +25,7 @@ export function populationIn(geometry) {
     if (lon < bbox[0] || lon > bbox[2] || lat < bbox[1] || lat > bbox[3]) continue;
     if (pointInGeometry([lon, lat], geometry)) sum += pop;
   }
-  return sum;
+  return Math.round(sum);
 }
 
 export function formatPopulation(n) {
