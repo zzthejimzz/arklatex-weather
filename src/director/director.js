@@ -9,11 +9,13 @@
 //                   watches (flashing outline + detail card), lower-tier alerts
 //                   (flood warnings / statements / advisories, each with the
 //                   detail card), radar echo clusters from the precip scout,
-//                   SPC outlooks Days 1–3 (wide), then the city forecast board.
+//                   SPC outlooks Days 1–3 (wide), current temps, rainfall
+//                   totals + drought monitor, then the city forecast board.
 import L from 'leaflet';
 import { boundsToLeaflet, pointInGeometry } from '../utils/geometry.js';
 import { isTourable } from './scoring.js';
 import { track } from '../utils/health.js';
+import { formatInches } from '../map/rainfall-layer.js';
 
 const TOUR_DWELL_MS = 25_000;
 const OVERVIEW_DWELL_MS = 30_000;
@@ -49,7 +51,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, rainfallLayer, droughtLayer, droughtFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
@@ -68,6 +70,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   let idlePlan = [];
   let idleIdx = 0;
   let spotIdx = 0; // 7-day city spotlight rotation — next city each idle cycle
+  let rainIdx = 0; // rainfall-totals window rotation (24h → 48h → 3-day)
 
   function onAlerts({ alerts, added }) {
     active = alerts;
@@ -177,9 +180,16 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       { type: 'outlook', day: 'day2', label: 'Day 2 Convective Outlook', dwell: busy ? 12_000 : 20_000 },
       { type: 'outlook', day: 'day3', label: 'Day 3 Convective Outlook', dwell: busy ? 12_000 : 20_000 },
     );
-    // Quiet-day depth, in "now → next 3 days → the week" order: current
-    // temps across the region, the 3-day board, then one city's 7 days.
+    // Quiet-day depth, in "now → recent past → next 3 days → the week" order:
+    // current temps, rainfall totals + the drought picture (a natural pair:
+    // who got rain, who still needs it), the 3-day board, one city's 7 days.
     if ((obsFeed?.get() ?? []).length >= 6) plan.push({ type: 'temps', dwell: busy ? 15_000 : 22_000 });
+    // Rainfall stop only when something actually fell (the scan gates it);
+    // the accumulation window rotates across cycles so repeats stay fresh.
+    const rain = rainfallLayer?.periods() ?? [];
+    if (rain.length) plan.push({ type: 'rainfall', period: rain[rainIdx++ % rain.length], dwell: busy ? 15_000 : 22_000 });
+    // Drought shot from D1 (moderate) up — D0 alone is not a story.
+    if ((droughtFeed?.worst() ?? -1) >= 1) plan.push({ type: 'drought', dwell: busy ? 14_000 : 20_000 });
     if (forecastPanel?.ready()) {
       plan.push({ type: 'forecast', dwell: 30_000 });
       plan.push({ type: 'forecast-city', dwell: busy ? 18_000 : 25_000 });
@@ -187,13 +197,22 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     return plan;
   }
 
-  // Back to plain reflectivity: cancel a pending mid-shot velocity switch and
-  // drop the overlay. Every shot starts from here.
+  // Back to plain reflectivity: cancel a pending mid-shot velocity switch,
+  // drop the velocity/rainfall/drought overlays, and restore the ambient
+  // outlook if the drought shot hid it. Every shot starts from here.
   let velTimer = null;
+  let outlookHidden = false;
   function resetRadarMode() {
     if (velTimer) { clearTimeout(velTimer); velTimer = null; }
     velocityLayer?.hide();
     radar?.setDim(false);
+    radar?.setHidden(false);
+    rainfallLayer?.hide();
+    droughtLayer?.hide();
+    if (outlookHidden) {
+      outlookHidden = false;
+      outlookLayer.show('day1');
+    }
   }
 
   function runIdleStep(step) {
@@ -254,6 +273,38 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         outlookLayer.show('day1');
         tempsLayer?.show(obsFeed?.get() ?? []);
         showChip('🌡️ Current Temperatures<span class="sub">NWS observations</span>');
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'rainfall': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        outlookLayer.show('day1');
+        const p = step.period;
+        // Radar hides only once the totals tiles are painted — both are precip
+        // palettes, but a brief overlap beats holes in the map on air.
+        rainfallLayer.show(p.key, () => radar?.setHidden(true));
+        showChip(`🌧️ ${p.label} Totals<span class="sub">Heaviest: ${formatInches(p.maxMm)} near ${p.place} · MRMS radar estimate</span>`);
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'drought': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        const info = droughtLayer?.show(droughtFeed?.get() ?? []);
+        if (!info) return advance(); // data gone since the plan was built
+        outlookLayer.hide(); // outlook risk fills run the same color ramp
+        outlookHidden = true;
+        const legend = info.legend
+          .map(m => `<span class="sw" style="background:${m.color}"></span>D${m.dm}`)
+          .join(' ');
+        showChip(`🏜️ U.S. Drought Monitor<span class="sub">Worst locally: <b style="color:${info.worst.chip}">${info.worst.label}</b></span><span class="sub">${legend} &nbsp;·&nbsp; burn bans common in D2+ counties</span>`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;

@@ -194,13 +194,27 @@ export function createRadarLoop(map) {
   let idx = frames.length - 1;
   // Velocity mode dims the loop to a faint underlay instead of hiding it: the
   // couplets read clearly on top, and if velocity tiles ever fail the shot
-  // still shows storms rather than an empty basemap.
+  // still shows storms rather than an empty basemap. Rainfall-totals mode
+  // hides it outright — live echoes animating over accumulated totals is two
+  // precip palettes fighting.
   let level = 1;
+  let dimmed = false;
+  let hidden = false;
   frames[idx].setOpacity(OPACITY);
 
-  function setDim(dim) {
-    level = dim ? 0.22 : 1;
+  function applyLevel() {
+    level = hidden ? 0 : dimmed ? 0.22 : 1;
     frames.forEach((f, i) => f.setOpacity(i === idx ? OPACITY * level : 0));
+  }
+
+  function setDim(dim) {
+    dimmed = dim;
+    applyLevel();
+  }
+
+  function setHidden(h) {
+    hidden = h;
+    applyLevel();
   }
 
   // Crossfade between frames — a hard cut reads as flicker on stream.
@@ -264,5 +278,5 @@ export function createRadarLoop(map) {
     }
   }
 
-  return { prewarm, setDim };
+  return { prewarm, setDim, setHidden };
 }

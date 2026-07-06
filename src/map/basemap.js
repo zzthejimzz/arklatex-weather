@@ -10,8 +10,9 @@
 //
 // Pane stack (bottom → top):
 //   tilePane 200      vector base, grey (fallback: CARTO dark, grey-filtered)
-//   overlayPane 400   SPC outlook fills
+//   overlayPane 400   SPC outlook fills, drought monitor fills (drought mode)
 //   radar 450         NEXRAD loop frames (normal blend over the grey base)
+//   rainfall 451      MRMS precip totals (rainfall map mode only)
 //   velocity 452      single-site base velocity (warning shots only)
 //   states 455        white state borders
 //   mcd 458           mesoscale discussions (dashed)

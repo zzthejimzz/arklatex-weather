@@ -62,10 +62,21 @@ export function createOutlookLayer(map) {
     return { maxRisk: best?.label ?? 'No severe risk outlined' };
   }
 
+  // Fully off — for shots whose own fills would collide with the risk colors
+  // (the drought monitor runs the same yellow→orange→red ramp). currentDay is
+  // cleared so the refresh timer can't resurrect the layer mid-shot; the next
+  // show() call brings it back.
+  function hide() {
+    if (layer) layer.remove();
+    layer = null;
+    currentDay = null;
+    lastKey = null;
+  }
+
   // Keep the ambient layer current — outlooks are reissued several times a day.
   setInterval(() => {
     if (currentDay) show(currentDay, { emphasize: emphasized, force: true });
   }, REFRESH_MS);
 
-  return { show };
+  return { show, hide };
 }

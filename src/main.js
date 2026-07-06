@@ -9,6 +9,9 @@ import { createAlertsLayer } from './map/alerts-layer.js';
 import { createReportsLayer } from './map/reports-layer.js';
 import { createMcdLayer } from './map/mcd-layer.js';
 import { createTempsLayer } from './map/temps-layer.js';
+import { createRainfallLayer } from './map/rainfall-layer.js';
+import { createDroughtLayer } from './map/drought-layer.js';
+import { createDroughtSource } from './data/drought.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -83,6 +86,13 @@ async function boot() {
   const ticker = createTicker(document.getElementById('ticker'), geo, obsSource);
   const tempsLayer = createTempsLayer(map);
 
+  // Quiet-day map modes: MRMS rainfall totals (self-scanning) and the weekly
+  // U.S. Drought Monitor picture.
+  const rainfallLayer = createRainfallLayer(map, geo);
+  const droughtSource = createDroughtSource(geo);
+  droughtSource.start();
+  const droughtLayer = createDroughtLayer(map);
+
   const forecasts = createCityForecasts();
   forecasts.start();
   const forecastPanel = createForecastPanel({
@@ -130,7 +140,7 @@ async function boot() {
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
     radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
-    velocityLayer,
+    velocityLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -201,6 +211,21 @@ async function boot() {
       if (obs.length < 5) return;
       clearInterval(t);
       tempsLayer.show(obs);
+    }, 500);
+  } else if (params.has('rain')) {
+    // Dev-only: park wide with rainfall totals over a hidden radar loop.
+    // ?rain picks 24h; ?rain=p48h / ?rain=p72h select the other windows.
+    map.fitBounds(regionBounds);
+    rainfallLayer.show(params.get('rain') || 'p24h', () => radar.setHidden(true));
+  } else if (params.has('drought')) {
+    // Dev-only: park wide with the drought monitor fills once they arrive.
+    map.fitBounds(regionBounds);
+    outlookLayer.hide();
+    const t = setInterval(() => {
+      const features = droughtSource.get();
+      if (!features.length) return;
+      clearInterval(t);
+      droughtLayer.show(features);
     }, 500);
   } else {
     director.boot();
