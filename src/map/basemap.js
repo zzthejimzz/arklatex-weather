@@ -12,6 +12,7 @@
 //   tilePane 200      vector base, grey (fallback: CARTO dark, grey-filtered)
 //   overlayPane 400   SPC outlook fills
 //   radar 450         NEXRAD loop frames (normal blend over the grey base)
+//   velocity 452      single-site base velocity (warning shots only)
 //   states 455        white state borders
 //   mcd 458           mesoscale discussions (dashed)
 //   watches 460       watch outlines

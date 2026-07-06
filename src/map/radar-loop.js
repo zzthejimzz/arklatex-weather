@@ -69,6 +69,13 @@ function loadImage(url) {
   return p;
 }
 
+// A failed fetch used to leave a permanently blank tile until the 5-minute
+// refresh — on air that's a crisp rectangular hole in the radar (worst right
+// after a zoom, when dozens of tiles fetch at once and a few lose the race).
+// Failures aren't sticky in imgCache, so retrying re-fetches just the misses.
+const TILE_RETRIES = 3;
+const TILE_RETRY_MS = 1500;
+
 const SmoothRadarLayer = L.GridLayer.extend({
   initialize(url, options) {
     L.GridLayer.prototype.initialize.call(this, options);
@@ -88,9 +95,32 @@ const SmoothRadarLayer = L.GridLayer.extend({
     tile.style.width = `${size.x}px`;
     tile.style.height = `${size.y}px`;
 
-    this._render(coords, tile)
-      .catch(() => {}) // empty tile beats a broken one
-      .finally(() => done(null, tile));
+    let announced = false;
+    const announce = () => {
+      if (!announced) { announced = true; done(null, tile); }
+    };
+    const attempt = (tryNo) => {
+      this._render(coords, tile).then(
+        (complete) => {
+          announce();
+          // A neighbor strip failed → seam at that tile edge. The canvas
+          // stays live in the DOM, so a later re-render heals it in place.
+          if (!complete && tryNo < TILE_RETRIES) {
+            setTimeout(() => { if (tile.isConnected) attempt(tryNo + 1); }, TILE_RETRY_MS * (tryNo + 1));
+          }
+        },
+        () => {
+          // Center tile failed — nothing painted yet. Hold `done` and retry
+          // so Leaflet doesn't count an empty canvas as a loaded tile.
+          if (tryNo < TILE_RETRIES) {
+            setTimeout(() => { if (!announced || tile.isConnected) attempt(tryNo + 1); }, TILE_RETRY_MS * (tryNo + 1));
+          } else {
+            announce(); // gave up — empty tile beats a broken one
+          }
+        },
+      );
+    };
+    attempt(0);
     return tile;
   },
 
@@ -118,7 +148,7 @@ const SmoothRadarLayer = L.GridLayer.extend({
       }
     }
     const loaded = (await Promise.all(jobs)).filter(Boolean);
-    if (!loaded.some((t) => t.dx === 0 && t.dy === 0)) return; // no center, no tile
+    if (!loaded.some((t) => t.dx === 0 && t.dy === 0)) throw new Error('center tile unavailable');
 
     const S = 256 + 2 * pad;
     const padded = document.createElement('canvas');
@@ -136,6 +166,7 @@ const SmoothRadarLayer = L.GridLayer.extend({
       const raw = loaded.find((t) => t.dx === 0 && t.dy === 0).img;
       tile.getContext('2d').drawImage(raw, 0, 0, 512, 512);
     }
+    return loaded.length === jobs.length; // false = a neighbor failed (seam risk)
   },
 });
 
@@ -161,7 +192,16 @@ export function createRadarLoop(map) {
   );
 
   let idx = frames.length - 1;
+  // Velocity mode dims the loop to a faint underlay instead of hiding it: the
+  // couplets read clearly on top, and if velocity tiles ever fail the shot
+  // still shows storms rather than an empty basemap.
+  let level = 1;
   frames[idx].setOpacity(OPACITY);
+
+  function setDim(dim) {
+    level = dim ? 0.22 : 1;
+    frames.forEach((f, i) => f.setOpacity(i === idx ? OPACITY * level : 0));
+  }
 
   // Crossfade between frames — a hard cut reads as flicker on stream.
   function fadeTo(nextIdx) {
@@ -171,8 +211,8 @@ export function createRadarLoop(map) {
     const t0 = performance.now();
     const step = (now) => {
       const t = Math.min(1, (now - t0) / XFADE_MS);
-      to.setOpacity(OPACITY * t);
-      from.setOpacity(OPACITY * (1 - t));
+      to.setOpacity(OPACITY * level * t);
+      from.setOpacity(OPACITY * level * (1 - t));
       if (t < 1 && idx === nextIdx) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
@@ -224,5 +264,5 @@ export function createRadarLoop(map) {
     }
   }
 
-  return { prewarm };
+  return { prewarm, setDim };
 }

@@ -3,6 +3,7 @@ import './broadcast.css';
 import L from 'leaflet';
 import { createBroadcastMap, addStateBorders } from './map/basemap.js';
 import { createRadarLoop } from './map/radar-loop.js';
+import { createVelocityLayer } from './map/velocity-layer.js';
 import { createOutlookLayer } from './map/outlook-layer.js';
 import { createAlertsLayer } from './map/alerts-layer.js';
 import { createReportsLayer } from './map/reports-layer.js';
@@ -64,6 +65,7 @@ async function boot() {
   addStateBorders(map);
   addCityLabels(map);
   const radar = createRadarLoop(map);
+  const velocityLayer = createVelocityLayer(map);
   const mcdLayer = createMcdLayer(map);
 
   const outlookLayer = createOutlookLayer(map);
@@ -128,6 +130,7 @@ async function boot() {
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
     radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
+    velocityLayer,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -182,6 +185,14 @@ async function boot() {
       mcdLayer.highlight(m.key);
       popup.showMcd(m);
     }, 500);
+  } else if (params.has('vel')) {
+    // Dev-only: park near the warning-sized default view with the velocity
+    // overlay up — checks velocity tiles + dimmed reflectivity without a live
+    // warning. ?vel=lat,lon picks the nearest radar to that point.
+    const [vlat, vlon] = (params.get('vel') || '32.45,-93.84').split(',').map(Number);
+    map.setView([vlat, vlon], 9.5);
+    velocityLayer.show(vlat, vlon);
+    radar.setDim(true);
   } else if (params.has('temps')) {
     // Dev-only: park wide with the current-temps chips as soon as obs arrive.
     map.fitBounds(regionBounds);

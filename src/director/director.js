@@ -34,6 +34,12 @@ const REPORT_IN_WARN_WINDOW_MS = 3 * 60 * 60 * 1000;
 const REPORT_IN_WARN_DWELL_MS = 15_000;
 const REPORT_IN_WARN_MAX = 2;
 
+// Storm-scale warnings get a two-act shot: reflectivity while the camera
+// settles, then a switch to single-site base velocity for the back half of the
+// dwell — the "is it rotating?" look. Reflectivity stays dimmed underneath.
+const VELOCITY_EVENTS = new Set(['tornado warning', 'severe thunderstorm warning']);
+const VELOCITY_AT = 0.45; // fraction of the dwell spent on reflectivity first
+
 // Destructive severe and every tornado warning: the rotation returns to it
 // between other stops and it holds the shot longer.
 const FOCUS_SCORE = 70;
@@ -43,7 +49,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
@@ -181,7 +187,17 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     return plan;
   }
 
+  // Back to plain reflectivity: cancel a pending mid-shot velocity switch and
+  // drop the overlay. Every shot starts from here.
+  let velTimer = null;
+  function resetRadarMode() {
+    if (velTimer) { clearTimeout(velTimer); velTimer = null; }
+    velocityLayer?.hide();
+    radar?.setDim(false);
+  }
+
   function runIdleStep(step) {
+    resetRadarMode();
     if (step.type !== 'report') reportsLayer?.highlight(null);
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
     if (step.type !== 'temps') tempsLayer?.hide();
@@ -278,6 +294,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   function startReport(id, dwell) {
     const live = (reportsFeed?.all() ?? []).find(r => r.id === id);
     if (!live) return advance();
+    resetRadarMode();
     touring = null;
     alertsLayer.highlight(null);
     mcdLayer?.highlight(null);
@@ -296,6 +313,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   function startMcd(key, dwell) {
     const live = (mcdFeed?.all() ?? []).find(m => m.key === key);
     if (!live || !live.bounds) return advance();
+    resetRadarMode();
     touring = null;
     alertsLayer.highlight(null);
     reportsLayer?.highlight(null);
@@ -309,6 +327,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   }
 
   function startTour(alert, isNew, dwell = TOUR_DWELL_MS, maxZoom = TOUR_MAX_ZOOM) {
+    resetRadarMode();
     touring = alert;
     hideChip();
     reportsLayer?.highlight(null);
@@ -321,9 +340,26 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     if (isNew) alertsLayer.flash(alert.key); // ~10 s white strobe as the camera arrives
     popup.show(alert, isNew);
     dwellUntil = Date.now() + FLY_MS + dwell;
+
+    // Act two: swap to base velocity partway through the hold on storm-scale
+    // warnings. Guarded by key so a pre-empted or expired shot never flips a
+    // later, unrelated shot into velocity mode.
+    const ev = (alert.props?.event ?? '').toLowerCase();
+    if (velocityLayer && VELOCITY_EVENTS.has(ev) && alert.bounds) {
+      const [w, s, e, n] = alert.bounds;
+      velTimer = setTimeout(() => {
+        velTimer = null;
+        if (touring?.key !== alert.key) return;
+        const site = velocityLayer.show((s + n) / 2, (w + e) / 2);
+        if (!site) return;
+        radar?.setDim(true);
+        showChip(`🌀 Storm Velocity — ${site.id} ${site.name}<span class="sub">green: toward radar · red: away · tight couplet = rotation</span>`);
+      }, FLY_MS + dwell * VELOCITY_AT);
+    }
   }
 
   function goOverview(dwell) {
+    resetRadarMode();
     touring = null;
     popup.hide();
     alertsLayer.highlight(null);
