@@ -63,6 +63,18 @@ export function createOutlookLayer(map, geo) {
     return lastSummary;
   }
 
+  // Fetch + summarize without painting — the director checks that a hazard
+  // has a local area before committing the camera (and the screen) to the
+  // shot. fetchOutlook caches, so the show() that follows a good peek is free.
+  async function peek(day, hazard) {
+    try {
+      return summarize(await fetchOutlook(day, hazard), hazard);
+    } catch (err) {
+      console.warn(`[outlook] ${day}/${hazard} peek failed:`, err);
+      return null;
+    }
+  }
+
   // Regional summary for the idle-tour chip: only tiers whose polygons touch
   // the ArkLaTex hull count — a High risk over Kansas is not our headline.
   // Hatched CIG (higher-intensity) areas don't rank; they set a flag.
@@ -106,5 +118,5 @@ export function createOutlookLayer(map, geo) {
     if (currentDay) show(currentDay, { emphasize: emphasized, force: true, hazard: currentHazard });
   }, REFRESH_MS);
 
-  return { show, hide };
+  return { show, hide, peek };
 }

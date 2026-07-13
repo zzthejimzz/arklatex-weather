@@ -186,8 +186,8 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     for (const p of pois) plan.push({ type: 'poi', poi: p, dwell: 20_000 });
     // Days 1–2 also carry SPC's tornado/wind/hail probabilities — each rides
     // right behind its categorical shot, and self-skips at runtime when no
-    // probability area touches the region (the data isn't fetched until the
-    // shot airs, so the plan can't know yet).
+    // probability area touches the region (the data is peeked when the stop
+    // comes up, before anything paints, so a skip never shows on screen).
     const hazardStops = [['torn', '🌪️ Tornado'], ['wind', '💨 Damaging Wind'], ['hail', '🧊 Large Hail']];
     plan.push({ type: 'outlook', day: 'day1', label: 'Day 1 Convective Outlook', dwell: busy ? 15_000 : 20_000 });
     for (const [hz, name] of hazardStops) plan.push({ type: 'outlook', day: 'day1', hazard: hz, label: `${name} Threat — Day 1`, dwell: busy ? 12_000 : 16_000 });
@@ -460,16 +460,25 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         popup.hide();
         alertsLayer.highlight(null);
         forecastPanel?.hide();
-        fly(wideBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
-        // The fetch resolves mid-fly; if a fresh warning pre-empted the shot
-        // meanwhile, dwellUntil has moved and this result belongs to a dead shot.
+        // The fetches resolve mid-shot; if a fresh warning pre-empted the shot
+        // meanwhile, dwellUntil has moved and the result belongs to a dead shot.
         const myShot = dwellUntil;
-        outlookLayer.show(step.day, { emphasize: true, hazard: step.hazard ?? 'cat' }).then(info => {
+        const hazard = step.hazard ?? 'cat';
+        (async () => {
+          if (step.hazard) {
+            // Peek before painting or moving the camera — a threat that
+            // exists nationally but not locally must skip without ever
+            // flashing its fills on screen (the previous shot just holds an
+            // extra beat).
+            const peeked = await outlookLayer.peek(step.day, hazard);
+            if (dwellUntil !== myShot) return;
+            if (!peeked?.worst) { dwellUntil = 0; return; }
+          }
+          fly(wideBounds);
+          const info = await outlookLayer.show(step.day, { emphasize: true, hazard });
           if (dwellUntil !== myShot) return;
           if (step.hazard) {
-            // Probability shot with nothing over the region — cut it now
-            // rather than air a blank map.
             if (!info?.worst) { dwellUntil = 0; return; }
             const legend = info.legend
               .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
@@ -484,7 +493,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
               : 'No severe risk in the ArkLaTex')
             : '';
           showChip(`${step.label}<span class="sub">${sub}</span>`);
-        });
+        })();
         return;
       }
       default: { // overview
