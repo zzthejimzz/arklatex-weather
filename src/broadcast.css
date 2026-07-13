@@ -488,33 +488,99 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 
 /* Climate almanac page (rides the forecast panel) */
 .alm-now {
-  margin: 14px 0 4px;
-  padding: 16px 20px;
+  margin: 12px 0 2px;
+  padding: 14px 22px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border-light);
   border-radius: 12px;
-  font-size: 22px; font-weight: 600;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
-.alm-now b { font-size: 30px; font-weight: 800; margin-left: 4px; }
-.alm-now .alm-dev { display: block; font-size: 16px; font-weight: 500; color: var(--text-muted); margin-top: 4px; }
-.alm-grid {
+.alm-now .an-label {
+  font-size: 15px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); font-family: var(--font-mono);
+}
+.alm-now .an-read { display: flex; align-items: center; gap: 16px; }
+.alm-now .an-read b { font-size: 46px; font-weight: 800; line-height: 1; }
+.an-pill {
+  font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
+  padding: 7px 15px; border-radius: 999px; white-space: nowrap;
+}
+.an-pill.above { color: #fbbf24; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); }
+.an-pill.below { color: #67e8f9; background: rgba(34, 211, 238, 0.10); border: 1px solid rgba(34, 211, 238, 0.30); }
+.an-pill.even  { color: var(--text-muted); background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-light); }
+
+/* Record-span meter: the ramp strip runs record low → record high, the
+   bright bracket marks the normal range, the white tick is right now. */
+.alm-meter { margin: 14px 8px 0; padding-top: 34px; }
+.am-track { position: relative; height: 18px; border-radius: 9px; }
+.am-band {
+  position: absolute; top: -5px; bottom: -5px;
+  border: 2px solid rgba(240, 244, 255, 0.9);
+  border-radius: 7px;
+}
+.am-now {
+  position: absolute; top: -11px; bottom: -11px; width: 4px;
+  transform: translateX(-50%);
+  background: #fff; border-radius: 2px;
+  box-shadow: 0 0 0 2px #0a0f1a;
+}
+.am-now-tag {
+  position: absolute; bottom: calc(100% + 15px); transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 14px; font-weight: 700;
+  letter-spacing: 0.06em; white-space: nowrap;
+  background: rgba(15, 22, 35, 0.92); border: 1px solid var(--border);
+  border-radius: 6px; padding: 3px 9px;
+}
+.am-scale {
+  position: relative; margin-top: 12px; height: 20px;
+  font-family: var(--font-mono); font-size: 15px; color: var(--text-muted);
+}
+.am-scale .am-end { position: absolute; top: 0; }
+.am-scale .am-end.lo { left: 0; }
+.am-scale .am-end.hi { right: 0; }
+.am-band-tag { position: absolute; top: 0; transform: translateX(-50%); letter-spacing: 0.05em; white-space: nowrap; }
+
+.alm-sec {
+  margin: 16px 2px 10px;
+  font-size: 15px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); font-family: var(--font-mono);
+  display: flex; align-items: center; gap: 12px;
+}
+.alm-sec::after { content: ''; flex: 1; height: 1px; background: var(--border-light); }
+.alm-row {
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 12px; margin-top: 12px; padding-bottom: 8px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
 }
+.alm-row.alm-rec { flex: 1.45; }
 .alm-cell {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-light);
   border-radius: 12px;
   padding: 10px;
 }
+.alm-cell.hot {
+  background: linear-gradient(165deg, rgba(226, 60, 60, 0.15), rgba(226, 60, 60, 0.03) 62%);
+  border-color: rgba(226, 60, 60, 0.35);
+}
+.alm-cell.cold {
+  background: linear-gradient(165deg, rgba(96, 165, 250, 0.15), rgba(96, 165, 250, 0.03) 62%);
+  border-color: rgba(96, 165, 250, 0.35);
+}
 .alm-cell .ac-label {
   font-size: 15px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
   color: var(--text-muted); font-family: var(--font-mono);
 }
-.alm-cell .ac-val { font-size: 52px; font-weight: 800; line-height: 1.15; }
-.alm-cell .ac-year { font-size: 17px; color: var(--text-muted); font-family: var(--font-mono); }
+.alm-cell .ac-val { font-size: 60px; font-weight: 800; line-height: 1.1; }
+.alm-rec .ac-val { font-size: 82px; }
+.alm-cell .ac-year {
+  margin-top: 8px;
+  font-size: 17px; font-weight: 700; color: var(--text-primary);
+  font-family: var(--font-mono); letter-spacing: 0.05em;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid var(--border-light);
+  border-radius: 999px; padding: 4px 16px;
+}
 
 /* Status chip: outlook day / precip-tracking label (bottom-right, idle) */
 #outlook-chip {

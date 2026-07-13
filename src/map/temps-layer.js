@@ -23,6 +23,24 @@ export function tempColor(f) {
   return RAMP[RAMP.length - 1][1];
 }
 
+// CSS gradient of the ramp across [lo, hi] with hard stops — the ramp is
+// banded, not interpolated, so the scale strip shows the same discrete
+// colors the chips do (the almanac's record-span meter uses this).
+export function rampGradient(lo, hi) {
+  const pct = t => Math.max(0, Math.min(100, ((t - lo) / (hi - lo || 1)) * 100));
+  const stops = [];
+  let from = 0;
+  for (const [max, color] of RAMP) {
+    const to = max === Infinity ? 100 : pct(max);
+    if (to > from) {
+      stops.push(`${color} ${from.toFixed(1)}% ${to.toFixed(1)}%`);
+      from = to;
+    }
+    if (from >= 100) break;
+  }
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
 export function createTempsLayer(map) {
   const group = L.layerGroup();
   let visible = false;

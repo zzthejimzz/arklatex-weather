@@ -332,8 +332,9 @@ async function boot() {
     const idx = Number(params.get('almanac')) || 0;
     const t = setInterval(() => {
       const c = almanacSource.get()[idx];
-      if (!c) return;
-      const nowF = obsSource.get().find(o => o.id === c.obsId)?.tempF ?? null;
+      const obs = obsSource.get();
+      if (!c || !obs.length) return; // wait for both feeds so the Now hero shows
+      const nowF = obs.find(o => o.id === c.obsId)?.tempF ?? null;
       if (forecastPanel.showAlmanac(c, { nowF, dateLabel: almanacSource.dateLabel() })) clearInterval(t);
     }, 500);
   }
