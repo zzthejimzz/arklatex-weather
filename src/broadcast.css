@@ -486,6 +486,36 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .fc-spot-row .sr-temp .lo { color: var(--text-muted); }
 .fc-spot-row .sr-meta { font-size: 14px; color: var(--text-muted); font-family: var(--font-mono); text-align: right; }
 
+/* Climate almanac page (rides the forecast panel) */
+.alm-now {
+  margin: 14px 0 4px;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  font-size: 22px; font-weight: 600;
+}
+.alm-now b { font-size: 30px; font-weight: 800; margin-left: 4px; }
+.alm-now .alm-dev { display: block; font-size: 16px; font-weight: 500; color: var(--text-muted); margin-top: 4px; }
+.alm-grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 12px; margin-top: 12px; padding-bottom: 8px;
+}
+.alm-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px;
+}
+.alm-cell .ac-label {
+  font-size: 15px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); font-family: var(--font-mono);
+}
+.alm-cell .ac-val { font-size: 52px; font-weight: 800; line-height: 1.15; }
+.alm-cell .ac-year { font-size: 17px; color: var(--text-muted); font-family: var(--font-mono); }
+
 /* Status chip: outlook day / precip-tracking label (bottom-right, idle) */
 #outlook-chip {
   position: absolute; right: 24px; bottom: calc(var(--ticker-h) + 20px); z-index: 900;
@@ -506,3 +536,24 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
 }
 #outlook-chip .sub .sw:first-child { margin-left: 0; }
+
+/* Rainfall chip legend: continuous ramp bar + inch anchor labels */
+#outlook-chip .rain-legend { display: block; margin-top: 10px; }
+#outlook-chip .rain-legend .bar {
+  display: block; height: 10px; border-radius: 5px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+#outlook-chip .rain-legend .labels {
+  position: relative; display: block; height: 20px; margin-top: 3px;
+}
+#outlook-chip .rain-legend .labels span {
+  position: absolute; top: 0;
+  font-size: 15px; font-weight: 600; color: var(--text-muted);
+}
+
+/* Tropical outlook: ✕ current-location marker (color set inline per tier) */
+.trop-x {
+  font-size: 26px; font-weight: 700; line-height: 30px; text-align: center;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 2px 3px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}

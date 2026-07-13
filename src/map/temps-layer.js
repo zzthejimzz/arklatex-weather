@@ -1,7 +1,8 @@
 // Current-temperatures map mode: a chip per observation station with the
-// temp in a classic broadcast color ramp + the town name. Shown only while
-// the director runs its "temps" idle stop. City-label panes are hidden while
-// active — the chips carry their own names, and doubled labels read sloppy.
+// temp (or feels-like value) in a classic broadcast color ramp + the town
+// name. Shown only while the director runs its "temps" / "feels" idle stops.
+// City-label panes are hidden while active — the chips carry their own
+// names, and doubled labels read sloppy.
 import L from 'leaflet';
 
 // Temp → color, the familiar TV ramp: purples ice-cold, blues cold, greens
@@ -33,10 +34,13 @@ export function createTempsLayer(map) {
     }
   }
 
-  function show(obs) {
+  // `key` picks which reading the chips plot: 'tempF' (default) or 'feelsF'
+  // for the feels-like mode — same ramp, the scale means the same thing.
+  function show(obs, key = 'tempF') {
     group.clearLayers();
     for (const o of obs) {
-      if (o.tempF == null) continue;
+      const v = o[key];
+      if (v == null) continue;
       group.addLayer(
         L.marker([o.lat, o.lon], {
           pane: 'temps',
@@ -46,7 +50,7 @@ export function createTempsLayer(map) {
             className: 'temp-anchor',
             html: `
               <div class="temp-chip">
-                <b style="color:${tempColor(o.tempF)}">${o.tempF}°</b>
+                <b style="color:${tempColor(v)}">${v}°</b>
                 <span>${o.city}</span>
               </div>`,
             iconSize: [0, 0],

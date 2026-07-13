@@ -8,6 +8,22 @@
 <body>
   <!-- Fixed 1920×1080 broadcast stage, scaled to fit the window for preview.
        The encoder captures a browser running at exactly 1920×1080 (scale = 1). -->
+  <!-- Fill patterns for SPC Conditional Intensity Group (CIG) hatched areas in
+       the tornado/wind/hail outlooks — referenced by url(#cigN-hatch) from
+       map-colors.js. Density steps up with intensity tier. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <pattern id="cig1-hatch" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="9" stroke="#000" stroke-width="1.4" />
+      </pattern>
+      <pattern id="cig2-hatch" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="7" stroke="#000" stroke-width="1.8" />
+      </pattern>
+      <pattern id="cig3-hatch" patternUnits="userSpaceOnUse" width="5" height="5" patternTransform="rotate(45)">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="#000" stroke-width="2.2" />
+      </pattern>
+    </defs>
+  </svg>
   <div id="viewport">
     <div id="stage">
       <div id="map"></div>

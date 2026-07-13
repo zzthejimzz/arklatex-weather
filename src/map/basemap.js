@@ -11,6 +11,7 @@
 // Pane stack (bottom → top):
 //   tilePane 200      vector base, grey (fallback: CARTO dark, grey-filtered)
 //   overlayPane 400   SPC outlook fills, drought monitor fills (drought mode)
+//   satellite 440     GOES vis/IR/WV imagery (satellite map mode only)
 //   radar 450         NEXRAD loop frames (normal blend over the grey base)
 //   rainfall 451      MRMS precip totals (rainfall map mode only)
 //   velocity 452      single-site base velocity (warning shots only)
@@ -26,7 +27,7 @@ import L from 'leaflet';
 import { addVectorBasemap } from './vector-basemap.js';
 
 const ATTR =
-  '&copy; OpenStreetMap &middot; OpenFreeMap &middot; Radar: Iowa State Mesonet / NEXRAD';
+  '&copy; OpenStreetMap &middot; OpenFreeMap &middot; Radar/Satellite: Iowa State Mesonet / NEXRAD / GOES';
 const MAX_ZOOM = 14;
 
 const PANES = {

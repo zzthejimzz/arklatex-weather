@@ -9,9 +9,15 @@ import { createAlertsLayer } from './map/alerts-layer.js';
 import { createReportsLayer } from './map/reports-layer.js';
 import { createMcdLayer } from './map/mcd-layer.js';
 import { createTempsLayer } from './map/temps-layer.js';
+import { createSatelliteLayer } from './map/satellite-layer.js';
 import { createRainfallLayer } from './map/rainfall-layer.js';
 import { createDroughtLayer } from './map/drought-layer.js';
 import { createDroughtSource } from './data/drought.js';
+import { createFireWxLayer } from './map/firewx-layer.js';
+import { createFireWxSource } from './data/firewx.js';
+import { createTropicalLayer, GULF_BBOX } from './map/tropical-layer.js';
+import { createTropicalSource } from './data/tropical.js';
+import { createAlmanacSource } from './data/almanac.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -26,7 +32,7 @@ import { createMcdSource, createMcdReplaySource, pickTourMcds } from './data/mcd
 import { createReplaySource } from './data/replay.js';
 import { loadPopulationGrid } from './data/population.js';
 import { createPrecipScout } from './data/precip-scout.js';
-import { boundsToLeaflet } from './utils/geometry.js';
+import { boundsToLeaflet, geometryBounds } from './utils/geometry.js';
 import { track, startWatchdog } from './utils/health.js';
 import { createStatusChip } from './ui/status-chip.js';
 import { startSoakMonitor } from './utils/soak.js';
@@ -71,7 +77,7 @@ async function boot() {
   const velocityLayer = createVelocityLayer(map);
   const mcdLayer = createMcdLayer(map);
 
-  const outlookLayer = createOutlookLayer(map);
+  const outlookLayer = createOutlookLayer(map, geo);
   outlookLayer.show('day1');
 
   const alertsLayer = createAlertsLayer(map);
@@ -86,12 +92,27 @@ async function boot() {
   const ticker = createTicker(document.getElementById('ticker'), geo, obsSource);
   const tempsLayer = createTempsLayer(map);
 
-  // Quiet-day map modes: MRMS rainfall totals (self-scanning) and the weekly
-  // U.S. Drought Monitor picture.
+  // Quiet-day map modes: GOES satellite imagery, MRMS rainfall totals
+  // (self-scanning), and the weekly U.S. Drought Monitor picture.
+  const satelliteLayer = createSatelliteLayer(map, geo);
   const rainfallLayer = createRainfallLayer(map, geo);
   const droughtSource = createDroughtSource(geo);
   droughtSource.start();
   const droughtLayer = createDroughtLayer(map);
+
+  // SPC fire weather outlook — only airs when an Elevated+ area touches the region.
+  const firewxSource = createFireWxSource(geo);
+  firewxSource.start();
+  const firewxLayer = createFireWxLayer(map);
+
+  // NHC tropical outlook — only airs when the Atlantic has a development area.
+  const tropicalSource = createTropicalSource();
+  tropicalSource.start();
+  const tropicalLayer = createTropicalLayer(map);
+
+  // Daily climate almanac: normals + records for the climate cities.
+  const almanacSource = createAlmanacSource();
+  almanacSource.start();
 
   const forecasts = createCityForecasts();
   forecasts.start();
@@ -140,7 +161,9 @@ async function boot() {
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
     radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
-    velocityLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
+    velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
+    firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
+    almanacFeed: almanacSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -212,11 +235,27 @@ async function boot() {
       clearInterval(t);
       tempsLayer.show(obs);
     }, 500);
+  } else if (params.has('feels')) {
+    // Dev-only: park wide with feels-like chips as soon as obs arrive.
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const obs = obsSource.get().filter(o => o.feelsF != null);
+      if (obs.length < 5) return;
+      clearInterval(t);
+      tempsLayer.show(obs, 'feelsF');
+    }, 500);
   } else if (params.has('rain')) {
     // Dev-only: park wide with rainfall totals over a hidden radar loop.
     // ?rain picks 24h; ?rain=p48h / ?rain=p72h select the other windows.
     map.fitBounds(regionBounds);
     rainfallLayer.show(params.get('rain') || 'p24h', () => radar.setHidden(true));
+  } else if (params.has('sat')) {
+    // Dev-only: park wide with a GOES channel up over the animating radar.
+    // ?sat picks infrared; ?sat=vis / ?sat=wv select the others (visible is
+    // black at night — it's reflected sunlight).
+    map.fitBounds(regionBounds);
+    outlookLayer.hide();
+    satelliteLayer.show(params.get('sat') || 'ir');
   } else if (params.has('drought')) {
     // Dev-only: park wide with the drought monitor fills once they arrive.
     map.fitBounds(regionBounds);
@@ -227,6 +266,56 @@ async function boot() {
       clearInterval(t);
       droughtLayer.show(features);
     }, 500);
+  } else if (params.has('fire')) {
+    // Dev-only: park with the fire weather fills once they arrive, framed to
+    // the areas themselves (the live product is often far from the region on
+    // a random day). ?fire picks day 1; ?fire=day2 selects day 2.
+    const day = params.get('fire') || 'day1';
+    const t = setInterval(() => {
+      const features = firewxSource.get(day);
+      if (!features.length) return;
+      clearInterval(t);
+      outlookLayer.hide(); // here, not at boot — the async day-1 show would repaint over an early hide
+      firewxLayer.show(features);
+      const b = features.map(f => geometryBounds(f.geometry)).filter(Boolean);
+      if (b.length) {
+        const union = [
+          Math.min(...b.map(x => x[0])), Math.min(...b.map(x => x[1])),
+          Math.max(...b.map(x => x[2])), Math.max(...b.map(x => x[3])),
+        ];
+        map.fitBounds(boundsToLeaflet(union), { padding: [60, 60] });
+      } else {
+        map.fitBounds(regionBounds);
+      }
+    }, 500);
+  } else if (params.has('tropical')) {
+    // Dev-only: park on the Gulf-wide tropical outlook shot. ?tropical uses
+    // live data (blank until the Atlantic wakes up); ?tropical=mock paints a
+    // fabricated Gulf disturbance so the visuals stay checkable off-season.
+    const mock = {
+      areas: [{
+        type: 'Feature',
+        properties: { basin: 'Atlantic', prob2day: '20%', prob7day: '60%', risk7day: 'Medium' },
+        geometry: { type: 'Polygon', coordinates: [[[-95, 22], [-90, 20], [-86, 21.5], [-85.5, 25], [-89, 26.5], [-93.5, 25.5], [-95, 22]]] },
+      }],
+      points: [{
+        type: 'Feature',
+        properties: { basin: 'Atlantic', prob2day: '20%', prob7day: '60%', risk7day: 'Medium' },
+        geometry: { type: 'Point', coordinates: [-88.5, 21] },
+      }],
+    };
+    const useMock = params.get('tropical') === 'mock';
+    map.fitBounds(regionBounds); // hold the region until data shows up
+    const t = setInterval(() => {
+      const data = useMock ? mock : tropicalSource.get();
+      if (!data.areas.length) return;
+      clearInterval(t);
+      outlookLayer.hide(); // after data, like ?fire — the async day-1 show would repaint over an early hide
+      const info = tropicalLayer.show(data);
+      const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
+      if (info?.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
+      map.fitBounds(b.pad(0.05));
+    }, 500);
   } else {
     director.boot();
   }
@@ -235,6 +324,17 @@ async function boot() {
     const city = params.get('panel') === 'city';
     const t = setInterval(() => {
       if (city ? forecastPanel.showCity(0) : forecastPanel.show()) clearInterval(t);
+    }, 500);
+  }
+  if (params.has('almanac')) {
+    // ?almanac forces the almanac page once its data arrives; ?almanac=N
+    // picks a city by index.
+    const idx = Number(params.get('almanac')) || 0;
+    const t = setInterval(() => {
+      const c = almanacSource.get()[idx];
+      if (!c) return;
+      const nowF = obsSource.get().find(o => o.id === c.obsId)?.tempF ?? null;
+      if (forecastPanel.showAlmanac(c, { nowF, dateLabel: almanacSource.dateLabel() })) clearInterval(t);
     }, 500);
   }
 }

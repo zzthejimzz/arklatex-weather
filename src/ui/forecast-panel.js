@@ -3,6 +3,7 @@
 // panel motion on air), and the director re-frames the region right after —
 // so invalidateSize must run synchronously here, before that fly starts.
 import { formatLocalTime } from '../utils/time.js';
+import { tempColor } from '../map/temps-layer.js';
 
 function dayCell(d) {
   const lo = d.lo != null ? ` / <span class="lo">${d.lo}°</span>` : '';
@@ -85,6 +86,47 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Daily climate almanac page — one city's normals + records for today,
+  // with the live temp up top when the obs feed has one for this city.
+  function showAlmanac(c, { nowF, dateLabel }) {
+    if (!c) return false;
+    const cell = (label, val, year) => `
+      <div class="alm-cell">
+        <div class="ac-label">${label}</div>
+        <div class="ac-val"${val == null ? '' : ` style="color:${tempColor(val)}"`}>${val == null ? '—' : `${val}°`}</div>
+        <div class="ac-year">${year ?? '&nbsp;'}</div>
+      </div>`;
+    let now = '';
+    if (nowF != null) {
+      const dev = nowF - c.normalHi;
+      const devTxt = dev === 0
+        ? 'right at the normal high'
+        : `${Math.abs(dev)}° ${dev > 0 ? 'above' : 'below'} the normal high`;
+      now = `
+        <div class="alm-now">
+          Right now <b style="color:${tempColor(nowF)}">${nowF}°</b>
+          <span class="alm-dev">· ${devTxt}</span>
+        </div>`;
+    }
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">📖 ${c.name} <span class="grad">Almanac</span></div>
+        <div class="fc-sub">${c.state} · ${dateLabel}${c.since ? ` · records back to ${c.since}` : ''} · NWS climate data</div>
+      </div>
+      ${now}
+      <div class="alm-grid">
+        ${cell('Normal High', c.normalHi)}
+        ${cell('Normal Low', c.normalLo)}
+        ${cell('Record High', c.recordHi, c.recordHiYear)}
+        ${cell('Record Low', c.recordLo, c.recordLoYear)}
+      </div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   function hide() {
     if (!open) return;
     open = false;
@@ -93,5 +135,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, hide, ready };
+  return { show, showCity, showAlmanac, hide, ready };
 }

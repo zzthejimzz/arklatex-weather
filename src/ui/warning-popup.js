@@ -30,7 +30,7 @@ export function createPopup(root) {
     const detection = param(p, 'tornadoDetection');
     if (detection) rows.push(row('📡', 'Source', titleCase(detection)));
 
-    const threat = param(p, 'tornadoDamageThreat') ?? param(p, 'thunderstormDamageThreat');
+    const threat = param(p, 'tornadoDamageThreat') ?? param(p, 'thunderstormDamageThreat') ?? param(p, 'flashFloodDamageThreat');
     if (threat) rows.push(row('⚠️', 'Threat', titleCase(threat), true));
 
     const hail = param(p, 'maxHailSize');

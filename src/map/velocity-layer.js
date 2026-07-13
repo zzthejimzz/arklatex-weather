@@ -7,7 +7,10 @@
 // NWS palette (green = toward the radar, red = away; a tight red/green couplet
 // is rotation). Unlike n0q there is no published index→value table for these
 // tiles, so no data-space smoothing — a light CSS blur on the pane melts the
-// raw RIDGE blocks enough for broadcast without inventing data.
+// raw RIDGE blocks enough for broadcast without inventing data. The stock
+// RIDGE palette is dark and desaturated — at partial opacity over the dimmed
+// reflectivity it read as "faded reflectivity" on stream — so the pane also
+// boosts saturation/brightness/contrast and the tiles run fully opaque.
 import L from 'leaflet';
 
 // WSR-88Ds covering the ArkLaTex and its edges.
@@ -25,7 +28,7 @@ const url = (site, ts) =>
 // New volume scan roughly every 4–6 min in precip mode; re-bust well inside that.
 const REFRESH_MS = 2 * 60 * 1000;
 const MAX_ZOOM = 14;
-const OPACITY = 0.9;
+const OPACITY = 1; // partial opacity let reflectivity greens bleed through and muddy the couplets
 
 export function nearestSite(lat, lon) {
   let best = SITES[0];
@@ -43,7 +46,9 @@ export function createVelocityLayer(map) {
   const pane = map.getPane('velocity');
   pane.style.zIndex = 452;
   pane.style.pointerEvents = 'none';
-  pane.style.filter = 'blur(1.5px)'; // melt RIDGE pixel blocks at broadcast distance
+  // Blur melts RIDGE pixel blocks at broadcast distance; the color boost
+  // turns the dark stock palette into TV-bright red/green so rotation pops.
+  pane.style.filter = 'blur(1.5px) saturate(2.2) brightness(1.2) contrast(1.2)';
 
   // No health beat here: velocity is an occasional overlay, silent for hours
   // on quiet days — registering it would just feed the watchdog false alarms.

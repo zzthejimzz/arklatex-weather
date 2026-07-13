@@ -28,7 +28,15 @@ export function scoreAlert(props) {
     return 50;
   }
   if (ev === 'flash flood warning') {
-    return /flash flood emergency/i.test(text) ? 75 : 45;
+    // Only a flash flood emergency tours like a storm-scale warning. FFWs run
+    // for hours — above TOUR_THRESHOLD they monopolize the rotation (solo
+    // warning mode) and the idle plan (statements, forecast, almanac) never
+    // airs. CONSIDERABLE still tops the minor stops and announces itself once
+    // on issuance (see announces()); the base tag just rides the idle plan.
+    const ffThreat = String(param(props, 'flashFloodDamageThreat') ?? '').toUpperCase();
+    if (ffThreat === 'CATASTROPHIC' || /flash flood emergency/i.test(text)) return 75;
+    if (ffThreat === 'CONSIDERABLE') return 38;
+    return 35;
   }
   if (ev === 'tornado watch') return 30;
   if (ev === 'severe thunderstorm watch') return 25;
@@ -41,10 +49,22 @@ export function scoreAlert(props) {
   return 2;
 }
 
-// Only warnings get the pan-and-zoom treatment; watches/advisories stay on the
-// map but the camera doesn't chase them.
+// Only storm-scale warnings get the pan-and-zoom treatment; watches,
+// advisories, and base flash flood warnings stay on the map (and get idle-plan
+// camera visits) but the warning rotation doesn't chase them.
 const TOUR_THRESHOLD = 40;
 
 export function isTourable(alert) {
   return alert.score >= TOUR_THRESHOLD && !!alert.geometry;
+}
+
+// Alerts that pre-empt the current shot once when first issued, even if they
+// don't join the warning rotation afterward: everything tourable, plus a
+// CONSIDERABLE flash flood warning — life-threatening flooding deserves an
+// on-air announcement before settling in as the top minor stop.
+export function announces(alert) {
+  if (isTourable(alert)) return true;
+  const ev = (alert.props?.event ?? '').toLowerCase();
+  return ev === 'flash flood warning' && !!alert.geometry
+    && String(param(alert.props, 'flashFloodDamageThreat') ?? '').toUpperCase() === 'CONSIDERABLE';
 }

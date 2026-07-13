@@ -40,18 +40,34 @@ const PAL_R = new Uint8Array(PAL_N);
 const PAL_G = new Uint8Array(PAL_N);
 const PAL_B = new Uint8Array(PAL_N);
 const PAL_A = new Uint8Array(PAL_N);
-for (let i = 0; i < PAL_N; i++) {
-  const dbz = (i - 64) / 2;
-  if (dbz <= STOPS[0][0]) continue; // transparent below the first stop
+
+// Interpolated [r, g, b, alpha] at an exact dBZ value.
+function evalStops(dbz) {
   let s = STOPS.length - 1;
   while (s > 0 && STOPS[s][0] > dbz) s--;
   const a0 = STOPS[s];
   const a1 = STOPS[Math.min(s + 1, STOPS.length - 1)];
-  const t = a1[0] === a0[0] ? 0 : Math.min(1, (dbz - a0[0]) / (a1[0] - a0[0]));
-  PAL_R[i] = Math.round(a0[1] + (a1[1] - a0[1]) * t);
-  PAL_G[i] = Math.round(a0[2] + (a1[2] - a0[2]) * t);
-  PAL_B[i] = Math.round(a0[3] + (a1[3] - a0[3]) * t);
-  PAL_A[i] = Math.round((a0[4] + (a1[4] - a0[4]) * t) * 255);
+  const t = a1[0] === a0[0] ? 0 : Math.max(0, Math.min(1, (dbz - a0[0]) / (a1[0] - a0[0])));
+  return [
+    a0[1] + (a1[1] - a0[1]) * t,
+    a0[2] + (a1[2] - a0[2]) * t,
+    a0[3] + (a1[3] - a0[3]) * t,
+    a0[4] + (a1[4] - a0[4]) * t,
+  ];
+}
+
+// Color snaps to the floor of its band (classic stepped NEXRAD bins) so every
+// intensity jump reads as a crisp boundary on stream; alpha stays continuous
+// so light rain still fades in and storm edges stay soft.
+const BAND_DBZ = 5;
+for (let i = 0; i < PAL_N; i++) {
+  const dbz = (i - 64) / 2;
+  if (dbz <= STOPS[0][0]) continue; // transparent below the first stop
+  const [r, g, b] = evalStops(Math.floor(dbz / BAND_DBZ) * BAND_DBZ);
+  PAL_R[i] = Math.round(r);
+  PAL_G[i] = Math.round(g);
+  PAL_B[i] = Math.round(b);
+  PAL_A[i] = Math.round(evalStops(dbz)[3] * 255);
 }
 
 // n0q source raster is ~0.0108°/px; melt blocks once they span multiple tile

@@ -1,39 +1,49 @@
-// SPC categorical outlook overlay. Sits in overlayPane (z 400) below the radar
-// pane so echoes read on top of the risk fills. Day 1 stays on at low opacity
-// as ambient context; the idle tour re-shows days 1–3 emphasized.
+// SPC outlook overlay (categorical + Day 1/2 tornado/wind/hail probabilities).
+// Sits in overlayPane (z 400) below the radar pane so echoes read on top of
+// the risk fills. Day 1 categorical stays on at low opacity as ambient
+// context; the idle tour re-shows days 1–3 (and the Day 1/2 hazard
+// probabilities) emphasized.
 import L from 'leaflet';
 import { fetchOutlook } from '../utils/spc-api.js';
-import { styleForFeature, normalizeLabel, CATEGORICAL } from '../utils/map-colors.js';
+import { styleForFeature, normalizeLabel, HAZARD_MAPS } from '../utils/map-colors.js';
+import { geometriesIntersect } from '../utils/geometry.js';
 
 const AMBIENT_OPACITY = 0.22;
 const EMPHASIZED_OPACITY = 0.5;
 const REFRESH_MS = 15 * 60 * 1000;
 
-export function createOutlookLayer(map) {
+export function createOutlookLayer(map, geo) {
+  const hull = { type: 'Polygon', coordinates: [geo.hull] };
   let layer = null;
   let currentDay = null;
+  let currentHazard = 'cat';
   let emphasized = false;
   let lastKey = null;
   let lastSummary = null;
+  let gen = 0; // bumped by every show()/hide() — an in-flight show that lost the race must not paint
 
-  async function show(day = 'day1', { emphasize = false, force = false } = {}) {
+  async function show(day = 'day1', { emphasize = false, force = false, hazard = 'cat' } = {}) {
     // The director calls show('day1') on every overview pass — skip the
     // re-render when nothing changed (the refresh timer passes force).
-    const key = `${day}:${emphasize ? 1 : 0}`;
+    const key = `${day}:${hazard}:${emphasize ? 1 : 0}`;
     if (!force && key === lastKey && layer) return lastSummary;
+    const myGen = ++gen;
 
     let data;
     try {
-      data = await fetchOutlook(day, 'cat');
+      data = await fetchOutlook(day, hazard);
     } catch (err) {
-      console.warn(`[outlook] ${day} fetch failed:`, err);
+      console.warn(`[outlook] ${day}/${hazard} fetch failed:`, err);
       return null;
     }
+    // A hide() (drought/fire shot) or newer show() happened while we awaited —
+    // painting now would resurrect the layer under someone else's fills.
+    if (myGen !== gen) return null;
 
     const next = L.geoJSON(data, {
       interactive: false,
       style: f => {
-        const s = styleForFeature('cat', f);
+        const s = styleForFeature(hazard, f);
         return {
           ...s,
           fillOpacity: emphasize ? Math.min(s.fillOpacity, EMPHASIZED_OPACITY) : AMBIENT_OPACITY,
@@ -46,27 +56,45 @@ export function createOutlookLayer(map) {
     if (layer) layer.remove();
     layer = next.addTo(map);
     currentDay = day;
+    currentHazard = hazard;
     emphasized = emphasize;
     lastKey = key;
-    lastSummary = summarize(data);
+    lastSummary = summarize(data, hazard);
     return lastSummary;
   }
 
-  // Highest categorical risk present — for the idle-tour chip.
-  function summarize(data) {
-    let best = null;
+  // Regional summary for the idle-tour chip: only tiers whose polygons touch
+  // the ArkLaTex hull count — a High risk over Kansas is not our headline.
+  // Hatched CIG (higher-intensity) areas don't rank; they set a flag.
+  function summarize(data, hazard) {
+    const colorMap = HAZARD_MAPS[hazard] ?? {};
+    const local = new Map(); // normalized label → entry, tiers over the region
+    let sig = false;
     for (const f of data?.features ?? []) {
-      const entry = CATEGORICAL[normalizeLabel(f)];
-      if (entry && (!best || entry.order > best.order)) best = entry;
+      const key = normalizeLabel(f);
+      const entry = colorMap[key];
+      if (!entry || !f.geometry) continue;
+      if (!geometriesIntersect(f.geometry, hull)) continue;
+      if (entry.isHatch) { sig = true; continue; }
+      local.set(key, entry);
     }
-    return { maxRisk: best?.label ?? 'No severe risk outlined' };
+    const rank = ([k, e]) => e.order ?? parseInt(k, 10);
+    const tiers = [...local.entries()].sort((a, b) => rank(a) - rank(b));
+    const worst = tiers.length ? tiers[tiers.length - 1][1] : null;
+    return {
+      worst: worst ? { label: worst.label, color: worst.fill } : null,
+      sig,
+      legend: tiers.map(([, e]) => ({ label: e.label, color: e.fill })),
+    };
   }
 
   // Fully off — for shots whose own fills would collide with the risk colors
-  // (the drought monitor runs the same yellow→orange→red ramp). currentDay is
+  // (the drought monitor and fire weather outlook run the same
+  // yellow→orange→red ramp). currentDay is
   // cleared so the refresh timer can't resurrect the layer mid-shot; the next
   // show() call brings it back.
   function hide() {
+    gen++;
     if (layer) layer.remove();
     layer = null;
     currentDay = null;
@@ -75,7 +103,7 @@ export function createOutlookLayer(map) {
 
   // Keep the ambient layer current — outlooks are reissued several times a day.
   setInterval(() => {
-    if (currentDay) show(currentDay, { emphasize: emphasized, force: true });
+    if (currentDay) show(currentDay, { emphasize: emphasized, force: true, hazard: currentHazard });
   }, REFRESH_MS);
 
   return { show, hide };

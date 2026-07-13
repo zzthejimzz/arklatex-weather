@@ -34,7 +34,8 @@ export function pointInGeometry(pt, geom) {
 // Iterate every outer-ring vertex of a Polygon/MultiPolygon.
 export function* outerVertices(geom) {
   if (!geom) return;
-  if (geom.type === 'Polygon') yield* geom.coordinates[0] ?? [];
+  if (geom.type === 'Point') yield geom.coordinates;
+  else if (geom.type === 'Polygon') yield* geom.coordinates[0] ?? [];
   else if (geom.type === 'MultiPolygon') {
     for (const poly of geom.coordinates) yield* poly[0] ?? [];
   } else if (geom.type === 'GeometryCollection') {

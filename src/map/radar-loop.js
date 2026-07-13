@@ -75,6 +75,7 @@ function loadImage(url) {
 // Failures aren't sticky in imgCache, so retrying re-fetches just the misses.
 const TILE_RETRIES = 3;
 const TILE_RETRY_MS = 1500;
+const NEIGHBOR_GRACE_MS = 350; // after the center lands, how long to hold first paint for neighbors
 
 const SmoothRadarLayer = L.GridLayer.extend({
   initialize(url, options) {
@@ -133,22 +134,34 @@ const SmoothRadarLayer = L.GridLayer.extend({
       this._url.replace('{z}', z).replace('{x}', ((x % n) + n) % n).replace('{y}', y);
 
     // Center tile + all 8 neighbors (HTTP cache makes the overlap ~free —
-    // each neighbor is also some other tile's center).
+    // each neighbor is also some other tile's center). Only the center is
+    // required before painting: waiting on the slowest of 9 fetches held the
+    // whole tile blank, which on a zoomed fly read as radar popping in
+    // tile-by-tile around the warning. Neighbors get a short grace after the
+    // center lands; stragglers keep loading into the shared cache and the
+    // caller's retry pass re-renders to heal any edge seam in place.
+    const slots = [];
     const jobs = [];
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         const y = coords.y + dy;
         if (y < 0 || y >= n) continue;
+        const slot = { img: null, dx, dy };
+        slots.push(slot);
         jobs.push(
           loadImage(url(coords.x + dx, y)).then(
-            (img) => ({ img, dx, dy }),
-            () => null, // missing neighbor = no data there
+            (img) => { slot.img = img; },
+            () => {}, // missing neighbor = no data there
           ),
         );
       }
     }
-    const loaded = (await Promise.all(jobs)).filter(Boolean);
-    if (!loaded.some((t) => t.dx === 0 && t.dy === 0)) throw new Error('center tile unavailable');
+    const all = Promise.all(jobs);
+    // Same cached promise the jobs loop created — rejection throws to the
+    // caller's center-failed retry path, exactly like before.
+    await loadImage(url(coords.x, coords.y));
+    await Promise.race([all, new Promise((r) => setTimeout(r, NEIGHBOR_GRACE_MS))]);
+    const loaded = slots.filter((s) => s.img);
 
     const S = 256 + 2 * pad;
     const padded = document.createElement('canvas');
@@ -166,7 +179,7 @@ const SmoothRadarLayer = L.GridLayer.extend({
       const raw = loaded.find((t) => t.dx === 0 && t.dy === 0).img;
       tile.getContext('2d').drawImage(raw, 0, 0, 512, 512);
     }
-    return loaded.length === jobs.length; // false = a neighbor failed (seam risk)
+    return loaded.length === slots.length; // false = a neighbor missing (seam risk)
   },
 });
 
@@ -252,6 +265,15 @@ export function createRadarLoop(map) {
   // Warm the tiles for a fly destination while the camera is still in the
   // air, so radar is painted (not popping in) when the shot settles. The
   // director calls this with the same bounds/maxZoom it hands flyToBounds.
+  // Warning-sized shots need ~60–130 tiles per frame — the old hard cap of 64
+  // made prewarm bail on exactly the flys that needed it, so the camera landed
+  // cold and radar popped in tile-by-tile (or showed one stretched parent tile,
+  // a solid orange smear over a heavy core). Budget instead of bail: the newest
+  // frames — what's on screen most of the loop — always warm first, and older
+  // frames spend whatever budget is left.
+  const PREWARM_FRAME_MAX = 220; // grid bigger than this per frame: shot too wide to warm usefully
+  const PREWARM_BUDGET = 700;    // total image loads per fly, across all frames
+
   function prewarm(bounds, maxZoom = MAX_ZOOM) {
     const z = Math.round(Math.min(map.getBoundsZoom(bounds), maxZoom, MAX_ZOOM));
     const n = 2 ** z;
@@ -261,13 +283,14 @@ export function createRadarLoop(map) {
     const x1 = se.x + 1;
     const y0 = Math.max(0, nw.y - 1);
     const y1 = Math.min(n - 1, se.y + 1);
-    if ((x1 - x0 + 1) * (y1 - y0 + 1) > 64) return; // too wide to warm usefully
+    if ((x1 - x0 + 1) * (y1 - y0 + 1) > PREWARM_FRAME_MAX) return;
 
-    // Newest frame first — it's what's on screen most of the loop.
-    for (let i = OFFSETS.length - 1; i >= 0; i--) {
+    let budget = PREWARM_BUDGET;
+    for (let i = OFFSETS.length - 1; i >= 0 && budget > 0; i--) {
       const tpl = url(i, ts);
-      for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1 && budget > 0; y++) {
+        for (let x = x0; x <= x1 && budget > 0; x++) {
+          budget--;
           const u = tpl
             .replace('{z}', z)
             .replace('{x}', ((x % n) + n) % n)

@@ -35,6 +35,44 @@ export function formatInches(mm) {
   return `${inches.toFixed(inches >= 1 ? 1 : 2)}″`;
 }
 
+// Chip legend: the ramp is continuous, so a gradient bar with inch anchors
+// beats discrete swatches. Anchors run log-ish — most totals live under 2″
+// but the ramp reads to 8″+. All three accumulation windows share it.
+const LEGEND_ANCHORS_IN = [0.1, 0.25, 0.5, 1, 2, 4, 8];
+
+function rampColor(mm) {
+  let best = PRECIP_LUT[0];
+  for (const e of PRECIP_LUT) {
+    if (e[0] > mm) break;
+    best = e;
+  }
+  return `rgb(${best[1]},${best[2]},${best[3]})`;
+}
+
+export function legendHtml() {
+  const n = LEGEND_ANCHORS_IN.length;
+  // Sample between anchors so the bar tracks the real (non-linear) ramp
+  // instead of smearing straight lines between anchor colors.
+  const SUB = 4;
+  const stops = [];
+  for (let i = 0; i < n - 1; i++) {
+    for (let j = 0; j < SUB; j++) {
+      const pct = ((i + j / SUB) / (n - 1)) * 100;
+      const inches = LEGEND_ANCHORS_IN[i] + (LEGEND_ANCHORS_IN[i + 1] - LEGEND_ANCHORS_IN[i]) * (j / SUB);
+      stops.push(`${rampColor(inches * 25.4)} ${pct.toFixed(1)}%`);
+    }
+  }
+  stops.push(`${rampColor(LEGEND_ANCHORS_IN[n - 1] * 25.4)} 100%`);
+  const labels = LEGEND_ANCHORS_IN.map((v, i) => {
+    const pos = i === 0 ? 'left:0'
+      : i === n - 1 ? 'right:0'
+      : `left:${((i / (n - 1)) * 100).toFixed(1)}%;transform:translateX(-50%)`;
+    const text = v < 1 ? `${String(v).slice(1)}″` : `${v}″`; // .1″ .25″ .5″ 1″ …
+    return `<span style="${pos}">${text}</span>`;
+  }).join('');
+  return `<span class="rain-legend"><span class="bar" style="background:linear-gradient(90deg,${stops.join(',')})"></span><span class="labels">${labels}</span></span>`;
+}
+
 const lon2tile = (lon, z) => Math.floor(((lon + 180) / 360) * 2 ** z);
 const lat2tile = (lat, z) => {
   const r = (lat * Math.PI) / 180;

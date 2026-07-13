@@ -4,6 +4,7 @@
 // ticker cities are a subset of these stations.
 import { fetchWithTimeout } from '../utils/net.js';
 import { track } from '../utils/health.js';
+import { feelsLikeF } from '../utils/feels-like.js';
 
 // ASOS/AWOS stations chosen for even coverage of the CWA. `city` is the
 // on-air name (ticker + map label), not the airport's.
@@ -45,10 +46,12 @@ async function fetchStation([id, city, lat, lon]) {
   const t = p.temperature?.value;
   const ws = p.windSpeed?.value;
   const kmh = (p.windSpeed?.unitCode ?? '').includes('km_h');
+  const rh = p.relativeHumidity?.value;
+  const tempF = t == null ? null : cToF(t);
+  const windMph = ws == null ? null : Math.round(ws * (kmh ? 0.621 : 2.237));
   return {
-    id, city, lat, lon,
-    tempF: t == null ? null : cToF(t),
-    windMph: ws == null ? null : Math.round(ws * (kmh ? 0.621 : 2.237)),
+    id, city, lat, lon, tempF, windMph,
+    feelsF: feelsLikeF(tempF, rh, windMph),
     desc: p.textDescription ?? '',
     at: p.timestamp,
   };
