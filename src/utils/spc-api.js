@@ -9,11 +9,13 @@ const IS_DEV = import.meta.env.DEV;
 const SPC_OUTLOOK  = 'https://www.spc.noaa.gov/products/outlook';
 const SPC_EXTENDED = 'https://www.spc.noaa.gov/products/exper/day4-8';
 const SPC_FIREWX   = 'https://www.spc.noaa.gov/products/fire_wx';
+const WPC_ERO      = 'https://www.wpc.ncep.noaa.gov/exper/eromap/geojson';
 
 const DEV_BASES = {
   [SPC_OUTLOOK]:  '/api/spc',
   [SPC_EXTENDED]: '/api/spc-ext',
   [SPC_FIREWX]:   '/api/spc-fire',
+  [WPC_ERO]:      '/api/wpc-ero',
 };
 
 const FILES = {
@@ -87,6 +89,32 @@ export async function fetchFireOutlook(day) {
 
   const res = await fetchWithTimeout(buildUrl(SPC_FIREWX, file));
   if (!res.ok) throw new Error(`SPC fire ${day}: HTTP ${res.status}`);
+
+  const data = await res.json();
+  cache.set(key, { at: Date.now(), data });
+  return data;
+}
+
+// WPC excessive rainfall outlook (flash-flood risk categories, Days 1–5).
+// Same fetch/cache/proxy machinery as SPC — WPC sends no CORS headers either.
+const ERO_FILES = {
+  day1: 'Day1_Latest.geojson',
+  day2: 'Day2_Latest.geojson',
+  day3: 'Day3_Latest.geojson',
+  day4: 'Day4_Latest.geojson',
+  day5: 'Day5_Latest.geojson',
+};
+
+export async function fetchExcessiveRain(day) {
+  const file = ERO_FILES[day];
+  if (!file) throw new Error(`Unknown ERO day: ${day}`);
+
+  const key = `ero:${file}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.data;
+
+  const res = await fetchWithTimeout(buildUrl(WPC_ERO, file));
+  if (!res.ok) throw new Error(`WPC ERO ${day}: HTTP ${res.status}`);
 
   const data = await res.json();
   cache.set(key, { at: Date.now(), data });

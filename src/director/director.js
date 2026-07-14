@@ -11,10 +11,11 @@
 //                   detail card), radar echo clusters from the precip scout,
 //                   SPC outlooks Days 1–3 (wide), current temps, GOES
 //                   satellite (IR/water vapor around the clock, visible by
-//                   day), rainfall totals + drought monitor (+ fire weather
-//                   when SPC has an Elevated+ area locally, + the tropical
-//                   outlook when the Atlantic has a development area), then
-//                   the forecast board.
+//                   day), rainfall totals + drought monitor (+ WPC excessive
+//                   rainfall when a flash-flood risk area sits locally, + fire
+//                   weather when SPC has an Elevated+ area locally, + the
+//                   tropical outlook when the Atlantic has a development
+//                   area), then the forecast board.
 import L from 'leaflet';
 import { boundsToLeaflet, pointInGeometry } from '../utils/geometry.js';
 import { GULF_BBOX } from '../map/tropical-layer.js';
@@ -56,7 +57,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, almanacFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, almanacFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
@@ -219,6 +220,12 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // the accumulation window rotates across cycles so repeats stay fresh.
     const rain = rainfallLayer?.periods() ?? [];
     if (rain.length) plan.push({ type: 'rainfall', period: rain[rainIdx++ % rain.length], dwell: busy ? 15_000 : 22_000 });
+    // Excessive rainfall outlook rides behind the totals (what fell → where
+    // flooding rain may fall next) — per outlook day, only when WPC has a
+    // risk area over the region.
+    for (const day of eroFeed?.days() ?? []) {
+      plan.push({ type: 'ero', day, dwell: busy ? 14_000 : 20_000 });
+    }
     // Drought shot from D1 (moderate) up — D0 alone is not a story.
     if ((droughtFeed?.worst() ?? -1) >= 1) plan.push({ type: 'drought', dwell: busy ? 14_000 : 20_000 });
     // Fire weather rides right behind drought (same dry-season story) — only
@@ -252,6 +259,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     satelliteLayer?.hide();
     rainfallLayer?.hide();
     droughtLayer?.hide();
+    eroLayer?.hide();
     firewxLayer?.hide();
     tropicalLayer?.hide();
     if (outlookHidden) {
@@ -401,6 +409,25 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
           .join(' ');
         showChip(`🏜️ U.S. Drought Monitor<span class="sub">Worst locally: <b style="color:${info.worst.chip}">${info.worst.label}</b></span><span class="sub">${legend} &nbsp;·&nbsp; burn bans common in D2+ counties</span>`);
         fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'ero': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        const worst = eroFeed?.worst(step.day);
+        const info = worst && eroLayer?.show(eroFeed.get(step.day));
+        if (!info) return advance(); // area gone since the plan was built
+        outlookLayer.hide(); // convective risk fills run the same green→red ramp
+        outlookHidden = true;
+        const dayNum = step.day.slice(3);
+        const legend = info.legend
+          .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
+          .join(' ');
+        showChip(`🌊 Day ${dayNum} Excessive Rainfall Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Risk (${worst.prob})</b></span><span class="sub">${legend} &nbsp;·&nbsp; rain exceeding flash flood guidance — WPC</span>`);
+        fly(wideBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }

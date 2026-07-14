@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const PORT = Number(process.argv[2]) || 8080;
 const DIST = join(fileURLToPath(import.meta.url), '../../dist');
 
-const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov']);
+const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov']);
 const PROXY_TTL_MS = 5 * 60 * 1000;
 const proxyCache = new Map(); // url → { at, status, type, body }
 
@@ -51,7 +51,12 @@ async function handleProxy(req, res, target) {
   }
 
   try {
-    const upstream = await fetch(target, { signal: AbortSignal.timeout(15000) });
+    // identity: WPC's server sometimes pairs a fresh geojson with a stale
+    // EMPTY gzip variant (200, zero bytes) — asking for gzip gets nothing.
+    const upstream = await fetch(target, {
+      headers: { 'accept-encoding': 'identity' },
+      signal: AbortSignal.timeout(15000),
+    });
     const body = Buffer.from(await upstream.arrayBuffer());
     const type = upstream.headers.get('content-type') || 'application/octet-stream';
     // Cache misses too (404 during SPC product transitions) — retrying every

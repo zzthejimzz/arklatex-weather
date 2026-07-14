@@ -13,6 +13,8 @@ import { createSatelliteLayer } from './map/satellite-layer.js';
 import { createRainfallLayer } from './map/rainfall-layer.js';
 import { createDroughtLayer } from './map/drought-layer.js';
 import { createDroughtSource } from './data/drought.js';
+import { createEroLayer } from './map/ero-layer.js';
+import { createEroSource } from './data/ero.js';
 import { createFireWxLayer } from './map/firewx-layer.js';
 import { createFireWxSource } from './data/firewx.js';
 import { createTropicalLayer, GULF_BBOX } from './map/tropical-layer.js';
@@ -100,6 +102,11 @@ async function boot() {
   droughtSource.start();
   const droughtLayer = createDroughtLayer(map);
 
+  // WPC excessive rainfall outlook — only airs when a risk area touches the region.
+  const eroSource = createEroSource(geo);
+  eroSource.start();
+  const eroLayer = createEroLayer(map);
+
   // SPC fire weather outlook — only airs when an Elevated+ area touches the region.
   const firewxSource = createFireWxSource(geo);
   firewxSource.start();
@@ -162,6 +169,7 @@ async function boot() {
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
     radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
     velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
+    eroLayer, eroFeed: eroSource,
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
     almanacFeed: almanacSource,
   });
@@ -265,6 +273,18 @@ async function boot() {
       if (!features.length) return;
       clearInterval(t);
       droughtLayer.show(features);
+    }, 500);
+  } else if (params.has('ero')) {
+    // Dev-only: park wide with the excessive rainfall fills once they arrive.
+    // ?ero picks day 1; ?ero=day2 selects day 2.
+    const day = params.get('ero') || 'day1';
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const features = eroSource.get(day);
+      if (!features.length) return;
+      clearInterval(t);
+      outlookLayer.hide(); // here, not at boot — the async day-1 show would repaint over an early hide
+      eroLayer.show(features);
     }, 500);
   } else if (params.has('fire')) {
     // Dev-only: park with the fire weather fills once they arrive, framed to

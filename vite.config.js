@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 // `vite preview` doesn't implement — its SPA fallback answers with index.html
 // and every SPC fetch dies on res.json(). Mirror deploy/serve.js's proxy so
 // preview behaves like the real host. Whitelist-only, same as serve.js.
-const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov']);
+const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov']);
 
 function previewSpcProxy() {
   return {
@@ -24,7 +24,12 @@ function previewSpcProxy() {
           return res.end('host not allowed');
         }
         try {
-          const upstream = await fetch(target, { signal: AbortSignal.timeout(15000) });
+          // identity: WPC sometimes serves a stale EMPTY gzip variant next to
+          // a fresh geojson — asking for gzip gets a 200 with zero bytes.
+          const upstream = await fetch(target, {
+            headers: { 'accept-encoding': 'identity' },
+            signal: AbortSignal.timeout(15000),
+          });
           res.statusCode = upstream.status;
           res.setHeader('content-type', upstream.headers.get('content-type') || 'application/octet-stream');
           res.end(Buffer.from(await upstream.arrayBuffer()));
@@ -49,6 +54,14 @@ export default defineConfig({
         target: 'https://www.spc.noaa.gov',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/spc-fire/, '/products/fire_wx'),
+      },
+      '/api/wpc-ero': {
+        target: 'https://www.wpc.ncep.noaa.gov',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/wpc-ero/, '/exper/eromap/geojson'),
+        // WPC sometimes serves a stale EMPTY gzip variant next to a fresh
+        // geojson (200, zero bytes) — force the uncompressed file.
+        headers: { 'accept-encoding': 'identity' },
       },
       '/api/spc-ext': {
         target: 'https://www.spc.noaa.gov',
