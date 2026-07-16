@@ -4,7 +4,7 @@
 // than light stratiform), bins them into ~0.2° cells, and clusters the hottest
 // cells into up to 3 points of interest.
 import { pointInGeometry } from '../utils/geometry.js';
-import { nearestPlace } from '../map/cities.js';
+import { nearestPlaceLabel } from '../map/cities.js';
 
 const BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913';
 const ZOOM = 7;
@@ -129,7 +129,8 @@ export function createPrecipScout(geo) {
           center: [lon, lat],
           bounds: [lon - 0.55, lat - 0.45, lon + 0.55, lat + 0.45],
           weight,
-          name: nearestPlace(lat, lon),
+          // Includes the relation word ("near X" / "12 mi NW of X").
+          placeLabel: nearestPlaceLabel(lat, lon),
         });
       }
 

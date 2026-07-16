@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 // `vite preview` doesn't implement — its SPA fallback answers with index.html
 // and every SPC fetch dies on res.json(). Mirror deploy/serve.js's proxy so
 // preview behaves like the real host. Whitelist-only, same as serve.js.
-const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov']);
+const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov']);
 
 function previewSpcProxy() {
   return {
@@ -43,13 +43,18 @@ function previewSpcProxy() {
   };
 }
 
-// SPC has no CORS headers — proxy in dev (same paths as the Website repo,
-// so spc-api.js works unchanged).
+// SPC/WPC/NWPS all send no CORS headers — proxy in dev (same paths as the
+// Website repo, so spc-api.js works unchanged).
 export default defineConfig({
   plugins: [previewSpcProxy()],
   server: {
     proxy: {
       // Longer prefixes first — '/api/spc' would otherwise swallow these.
+      '/api/nwps': {
+        target: 'https://api.water.noaa.gov',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/nwps/, '/nwps/v1/gauges'),
+      },
       '/api/spc-fire': {
         target: 'https://www.spc.noaa.gov',
         changeOrigin: true,

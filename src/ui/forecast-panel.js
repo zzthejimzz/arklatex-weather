@@ -4,6 +4,7 @@
 // so invalidateSize must run synchronously here, before that fly starts.
 import { formatLocalTime } from '../utils/time.js';
 import { tempColor, rampGradient } from '../map/temps-layer.js';
+import { moonInfo, nextPhases } from '../utils/moon.js';
 
 function dayCell(d) {
   const lo = d.lo != null ? ` / <span class="lo">${d.lo}°</span>` : '';
@@ -159,6 +160,94 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Frost/freeze & growing-season page — one city's spring/fall 32°F freeze
+  // normals plus the growing-season length, from NCEI climate normals. The
+  // bar plots the frost-free window on a Jan→Dec axis; the tip line reads
+  // the 80%-of-years bounds as plain planting/protecting guidance.
+  function showFrost(c) {
+    if (!c) return false;
+    const bandL = (c.lastFreeze.median.doy / 365) * 100;
+    const bandW = Math.max(((c.firstFreeze.median.doy - c.lastFreeze.median.doy) / 365) * 100, 2);
+    const freezeCell = (icon, label, f) => `
+      <div class="alm-cell frost-cell">
+        <div class="ac-label">${icon} ${label}</div>
+        <div class="ac-val">${f.median.label}</div>
+        <div class="ac-year">${f.early.label} – ${f.late.label}</div>
+      </div>`;
+    const hard = c.hardFreeze.last && c.hardFreeze.first
+      ? `<div class="fc-sub frost-hard">🥶 Hard freeze (28°F) normals: ends ${c.hardFreeze.last.label} · begins ${c.hardFreeze.first.label}</div>`
+      : '';
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">🌱 ${c.name} <span class="grad">Growing Season</span></div>
+        <div class="fc-sub">${c.state} · NCEI 1991–2020 Climate Normals · 32°F threshold</div>
+      </div>
+      <div class="alm-now">
+        <div class="an-label">Frost-Free Growing Season</div>
+        <div class="an-read"><b>${c.growingSeasonDays}</b><span class="an-pill even">days, average</span></div>
+      </div>
+      <div class="alm-meter frost-meter">
+        <div class="am-track frost-track">
+          <div class="am-band frost-band" style="left:${bandL}%;width:${bandW}%"></div>
+        </div>
+        <div class="am-scale">
+          <span class="am-end lo">Jan</span>
+          <span class="am-band-tag" style="left:${Math.min(Math.max(bandL + bandW / 2, 20), 80)}%">frost-free</span>
+          <span class="am-end hi">Dec</span>
+        </div>
+      </div>
+      <div class="alm-sec">Freeze Dates (32°F)</div>
+      <div class="alm-row">
+        ${freezeCell('🌱', 'Last Freeze — Spring', c.lastFreeze)}
+        ${freezeCell('🍂', 'First Freeze — Fall', c.firstFreeze)}
+      </div>
+      ${hard}
+      <div class="frost-tip">🌻 Typically safe to set out tender plants after <b>${c.lastFreeze.late.label}</b> &nbsp;·&nbsp; bring them back in by <b>${c.firstFreeze.early.label}</b></div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
+  // Moon-phases page — computed locally in moon.js, so unlike the other
+  // pages there is no feed to wait on and this can never return false.
+  function showMoon() {
+    const now = new Date();
+    const m = moonInfo(now);
+    const fmtDate = d => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const inDays = d => {
+      const n = Math.round((d - now) / 86_400_000);
+      return n <= 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} days`;
+    };
+    const row = p => `
+      <div class="moon-row">
+        <div class="mr-ico">${p.emoji}</div>
+        <div class="mr-name">${p.name}</div>
+        <div class="mr-date">${fmtDate(p.date)}</div>
+        <div class="mr-in">${inDays(p.date)}</div>
+      </div>`;
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">🌙 Moon <span class="grad">Phases</span></div>
+        <div class="fc-sub">${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+      </div>
+      <div class="moon-hero">
+        <div class="mh-emoji">${m.emoji}</div>
+        <div>
+          <div class="mh-name">${m.name}</div>
+          <div class="mh-sub">${Math.round(m.fraction * 100)}% illuminated · ${m.waxing ? 'waxing — filling toward full' : 'waning — thinning toward new'}</div>
+        </div>
+      </div>
+      <div class="alm-sec">Coming Up</div>
+      <div class="moon-list">${nextPhases(now, 4).map(row).join('')}</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   function hide() {
     if (!open) return;
     open = false;
@@ -167,5 +256,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, showAlmanac, hide, ready };
+  return { show, showCity, showAlmanac, showFrost, showMoon, hide, ready };
 }

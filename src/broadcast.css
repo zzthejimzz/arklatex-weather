@@ -308,6 +308,38 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   to   { transform: scale(1); }
 }
 
+/* ─── River gauge pins ──────────────────────────────────────────────── */
+/* Emoji pin ringed in the flood-category color. The gauge driving the shot
+   (the one named in the chip text) gets the same sonar-ring treatment as a
+   visited LSR pin — nothing else "tours" an individual gauge. */
+.river-marker { background: none; border: none; }
+.river-pin {
+  position: relative;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1;
+  background: rgba(15, 22, 35, 0.92);
+  border: 2.5px solid var(--river-color, #fff);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s ease;
+}
+.river-pin.highlighted {
+  transform: scale(1.4);
+  border-color: #fff;
+  box-shadow: 0 0 0 3px var(--river-color, #fff), 0 0 22px var(--river-color, #fff);
+}
+.river-pin.highlighted::before,
+.river-pin.highlighted::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 3px solid var(--river-color, #fff);
+  animation: lsrPulse 2s ease-out infinite;
+  pointer-events: none;
+}
+.river-pin.highlighted::after { animation-delay: 1s; }
+
 /* Report detail card additions (rides on .warn-card) */
 .warn-card-tag {
   font-size: 13px; font-weight: 800; letter-spacing: 0.12em;
@@ -581,6 +613,46 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   background: rgba(255, 255, 255, 0.07); border: 1px solid var(--border-light);
   border-radius: 999px; padding: 4px 16px;
 }
+
+/* Frost/freeze & growing-season page (rides the forecast panel) */
+.frost-track {
+  background: linear-gradient(90deg,
+    #3b82f6 0%, #60a5fa 13%, #34d399 34%, #22c55e 50%, #34d399 66%, #60a5fa 87%, #3b82f6 100%);
+}
+.frost-cell .ac-val { font-size: 46px; }
+.frost-hard { margin: 10px 2px 0; }
+.frost-tip {
+  margin-top: 14px; padding: 12px 18px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  border-radius: 12px;
+  font-size: 16px; line-height: 1.4;
+}
+.frost-tip b { color: #4ade80; }
+
+/* Moon phases page (rides the forecast panel) */
+.moon-hero {
+  margin: 12px 0 2px;
+  padding: 18px 26px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  display: flex; align-items: center; gap: 26px;
+}
+.moon-hero .mh-emoji { font-size: 84px; line-height: 1; }
+.moon-hero .mh-name { font-size: 34px; font-weight: 800; }
+.moon-hero .mh-sub { font-size: 16px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 7px; }
+.moon-list { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.moon-row {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 64px 1fr 160px 120px;
+  align-items: center; gap: 10px;
+  border-top: 1px solid var(--border-light);
+}
+.moon-row .mr-ico { font-size: 40px; text-align: center; }
+.moon-row .mr-name { font-size: 21px; font-weight: 700; }
+.moon-row .mr-date { font-size: 18px; font-family: var(--font-mono); text-align: right; }
+.moon-row .mr-in { font-size: 15px; color: var(--text-muted); font-family: var(--font-mono); text-align: right; }
 
 /* Status chip: outlook day / precip-tracking label (bottom-right, idle) */
 #outlook-chip {

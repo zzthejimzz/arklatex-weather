@@ -3,7 +3,7 @@
 // Serves the built dist/ directory and implements the same /proxy.php?url=
 // contract the Website's Apache host provides (spc-api.js calls it in prod
 // builds), so the client code runs unchanged. Whitelist-only, 5-minute
-// in-memory cache, because SPC publishes no CORS headers.
+// in-memory cache, because SPC/WPC/NWPS publish no CORS headers.
 //
 // Run: node deploy/serve.js [port]   (systemd: arklatex-serve.service)
 import { createServer } from 'node:http';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 const PORT = Number(process.argv[2]) || 8080;
 const DIST = join(fileURLToPath(import.meta.url), '../../dist');
 
-const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov']);
+const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov']);
 const PROXY_TTL_MS = 5 * 60 * 1000;
 const proxyCache = new Map(); // url → { at, status, type, body }
 

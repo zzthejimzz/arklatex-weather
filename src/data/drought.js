@@ -12,6 +12,10 @@ const RETRY_MS = 10 * 60 * 1000;
 
 export function createDroughtSource(geo) {
   let features = []; // GeoJSON features, DM ascending (paint worst on top)
+  // Thursday this analysis was published — from the ReleaseDate field. (The
+  // service also has MapDate/ValidStart, the Tuesday data cutoff the map
+  // reflects; ReleaseDate is the one that matches "new map every Thursday".)
+  let releaseDate = null;
 
   function url() {
     const [w, s, e, n] = geo.bbox;
@@ -22,7 +26,7 @@ export function createDroughtSource(geo) {
       geometryType: 'esriGeometryEnvelope',
       inSR: '4326',
       spatialRel: 'esriSpatialRelIntersects',
-      outFields: 'DM',
+      outFields: 'DM,ReleaseDate',
       outSR: '4326',
       maxAllowableOffset: '0.02', // generalize: broadcast map, not a survey
     });
@@ -38,6 +42,9 @@ export function createDroughtSource(geo) {
       features = (data.features ?? [])
         .filter(f => f.geometry && Number.isFinite(f.properties?.DM))
         .sort((a, b) => a.properties.DM - b.properties.DM);
+      // Same ReleaseDate on every feature (one release per query) — just read the first.
+      const ms = features[0]?.properties?.ReleaseDate;
+      releaseDate = Number.isFinite(ms) ? new Date(ms) : null;
     } catch (err) {
       console.warn('[drought] fetch failed:', err);
       if (!features.length) delay = RETRY_MS; // nothing on hand — retry sooner
@@ -56,5 +63,5 @@ export function createDroughtSource(geo) {
     return features.length ? features[features.length - 1].properties.DM : null;
   }
 
-  return { start, get: () => features, worst };
+  return { start, get: () => features, worst, releaseDate: () => releaseDate };
 }

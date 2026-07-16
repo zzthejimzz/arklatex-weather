@@ -61,8 +61,10 @@ export function createTropicalSource() {
 
   return {
     start,
-    // Anything brewing in the Atlantic — the director's gate.
+    // Anything brewing in the Atlantic — the director's gate; the count
+    // decides whether the shot gets per-disturbance follow-ups.
     active: () => (data?.areas.length ?? 0) > 0,
+    count: () => data?.areas.length ?? 0,
     get: () => data ?? { areas: [], points: [] },
   };
 }

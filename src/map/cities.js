@@ -6,13 +6,14 @@
 //      avoid DOM markers, so the two must never share a zoom band. State
 //      capitals (Little Rock, Jackson, …) are GL-labeled at every zoom —
 //      never add them here.
-//   2. Name things ("Tracking showers near Marshall") via nearestPlace().
+//   2. Name things ("Tracking showers near Marshall", "12 mi NW of Winnfield")
+//      via nearestPlaceLabel().
 import L from 'leaflet';
 
 export const PLACES = [
   // [name, lat, lon, tier]
   // tier 0 — out-of-region context anchors (overview framing only).
-  // Excluded from nearestPlace so tours never say "near Dallas".
+  // Excluded from nearestPlaceLabel so tours never say "near Dallas".
   ['Dallas',          32.777, -96.797, 0],
   ['Fort Worth',      32.755, -97.331, 0],
   ['Waco',            31.549, -97.147, 0],
@@ -139,16 +140,33 @@ export function addCityLabels(map) {
   sync();
 }
 
-export function nearestPlace(lat, lon) {
+const MI_PER_DEG_LAT = 69.05;
+const NEAR_MI = 6; // beyond this, "near X" overstates — switch to distance + direction
+
+// Names a point for on-air captions. Returns "near Winnfield" only when the
+// point is genuinely close to the town; otherwise "14 mi NW of Winnfield",
+// so the chip never claims precip is at a town it isn't. The returned string
+// includes the relation word — callers should not prepend "near".
+export function nearestPlaceLabel(lat, lon) {
+  const cosLat = Math.cos((lat * Math.PI) / 180);
   let best = null;
-  let bestD = Infinity;
-  for (const [name, plat, plon, tier] of PLACES) {
-    if (tier === 0) continue; // anchors are outside the region
-    const d = (plat - lat) ** 2 + (plon - lon) ** 2;
-    if (d < bestD) {
-      bestD = d;
-      best = name;
+  let bestMi = Infinity;
+  for (const place of PLACES) {
+    if (place[3] === 0) continue; // anchors are outside the region
+    const mi = Math.hypot(
+      (place[1] - lat) * MI_PER_DEG_LAT,
+      (place[2] - lon) * MI_PER_DEG_LAT * cosLat,
+    );
+    if (mi < bestMi) {
+      bestMi = mi;
+      best = place;
     }
   }
-  return best;
+  const [name, plat, plon] = best;
+  if (bestMi <= NEAR_MI) return `near ${name}`;
+  const bearing = (Math.atan2((lon - plon) * cosLat, lat - plat) * 180) / Math.PI;
+  const dir = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][
+    Math.round(((bearing + 360) % 360) / 45) % 8
+  ];
+  return `${Math.round(bestMi)} mi ${dir} of ${name}`;
 }

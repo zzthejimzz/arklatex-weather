@@ -21,6 +21,10 @@ export function formatClock(d = new Date()) {
   return { date: dateFmt.format(d), time: `${clockFmt.format(d)} CT` };
 }
 
+export function formatDate(d) {
+  return d instanceof Date && !isNaN(d) ? dateFmt.format(d) : null;
+}
+
 // "1:04:32" / "24:15" remaining until `iso`, or "EXPIRED".
 export function countdown(iso) {
   if (!iso) return null;

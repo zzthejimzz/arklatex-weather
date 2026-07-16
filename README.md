@@ -41,7 +41,8 @@ npm run dev          # open http://localhost:5173/
   rotate overview ↔ warnings by severity. A lone warning keeps most of the
   airtime. No warnings → tour watches (subtle flashing outline + detail card),
   then radar echo clusters found by the **precip scout**
-  (`src/data/precip-scout.js`, "Tracking precipitation near <town>"), then SPC
+  (`src/data/precip-scout.js`, "Tracking precipitation near <town>" — or
+  "12 mi NW of <town>" when the echo isn't actually close), then SPC
   Day 1–3 outlooks framed wide. The map never sits still.
 - **Banner**: most severe active alert with expiry countdown · brand + Central
   time clock · top-5 alert-type counts.

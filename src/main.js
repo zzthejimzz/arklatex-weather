@@ -19,7 +19,10 @@ import { createFireWxLayer } from './map/firewx-layer.js';
 import { createFireWxSource } from './data/firewx.js';
 import { createTropicalLayer, GULF_BBOX } from './map/tropical-layer.js';
 import { createTropicalSource } from './data/tropical.js';
+import { createRiverGaugeLayer } from './map/river-gauge-layer.js';
+import { createRiverGaugeSource } from './data/river-gauges.js';
 import { createAlmanacSource } from './data/almanac.js';
+import { createFrostSource } from './data/frost.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -117,9 +120,20 @@ async function boot() {
   tropicalSource.start();
   const tropicalLayer = createTropicalLayer(map);
 
+  // NWS river gauge flood status — only airs when a gauge locally is at
+  // action stage or above, or unusually low.
+  const riverSource = createRiverGaugeSource(geo);
+  riverSource.start();
+  const riverLayer = createRiverGaugeLayer(map);
+
   // Daily climate almanac: normals + records for the climate cities.
   const almanacSource = createAlmanacSource();
   almanacSource.start();
+
+  // Frost/freeze & growing-season normals for the climate cities — static
+  // data, fetched once.
+  const frostSource = createFrostSource();
+  frostSource.start();
 
   const forecasts = createCityForecasts();
   forecasts.start();
@@ -171,7 +185,8 @@ async function boot() {
     velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
     eroLayer, eroFeed: eroSource,
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
-    almanacFeed: almanacSource,
+    riverLayer, riverFeed: riverSource,
+    almanacFeed: almanacSource, frostFeed: frostSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -286,6 +301,15 @@ async function boot() {
       outlookLayer.hide(); // here, not at boot — the async day-1 show would repaint over an early hide
       eroLayer.show(features);
     }, 500);
+  } else if (params.has('river')) {
+    // Dev-only: park wide with river gauge pins once a notable reading arrives.
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const gauges = riverSource.get();
+      if (!gauges.length) return;
+      clearInterval(t);
+      riverLayer.show(gauges);
+    }, 500);
   } else if (params.has('fire')) {
     // Dev-only: park with the fire weather fills once they arrive, framed to
     // the areas themselves (the live product is often far from the region on
@@ -310,28 +334,43 @@ async function boot() {
     }, 500);
   } else if (params.has('tropical')) {
     // Dev-only: park on the Gulf-wide tropical outlook shot. ?tropical uses
-    // live data (blank until the Atlantic wakes up); ?tropical=mock paints a
-    // fabricated Gulf disturbance so the visuals stay checkable off-season.
+    // live data (blank until the Atlantic wakes up); ?tropical=mock paints
+    // two fabricated disturbances so the visuals stay checkable off-season.
+    // Add &tropfocus=N to park on the per-disturbance focus shot instead
+    // (N indexes the areas ascending by chance, like the director does).
     const mock = {
       areas: [{
+        type: 'Feature',
+        properties: { basin: 'Atlantic', prob2day: '10%', prob7day: '30%', risk7day: 'Low' },
+        geometry: { type: 'Polygon', coordinates: [[[-82, 14.5], [-77.5, 13.5], [-74, 15], [-74.5, 18.5], [-78.5, 19.5], [-81.5, 17.5], [-82, 14.5]]] },
+      }, {
         type: 'Feature',
         properties: { basin: 'Atlantic', prob2day: '20%', prob7day: '60%', risk7day: 'Medium' },
         geometry: { type: 'Polygon', coordinates: [[[-95, 22], [-90, 20], [-86, 21.5], [-85.5, 25], [-89, 26.5], [-93.5, 25.5], [-95, 22]]] },
       }],
       points: [{
         type: 'Feature',
+        properties: { basin: 'Atlantic', prob2day: '10%', prob7day: '30%', risk7day: 'Low' },
+        geometry: { type: 'Point', coordinates: [-76.5, 15.5] },
+      }, {
+        type: 'Feature',
         properties: { basin: 'Atlantic', prob2day: '20%', prob7day: '60%', risk7day: 'Medium' },
         geometry: { type: 'Point', coordinates: [-88.5, 21] },
       }],
     };
     const useMock = params.get('tropical') === 'mock';
+    const focusIdx = params.has('tropfocus') ? Number(params.get('tropfocus')) || 0 : null;
     map.fitBounds(regionBounds); // hold the region until data shows up
     const t = setInterval(() => {
       const data = useMock ? mock : tropicalSource.get();
       if (!data.areas.length) return;
       clearInterval(t);
       outlookLayer.hide(); // after data, like ?fire — the async day-1 show would repaint over an early hide
-      const info = tropicalLayer.show(data);
+      const info = tropicalLayer.show(data, focusIdx);
+      if (info?.focus) {
+        map.fitBounds(L.latLngBounds(boundsToLeaflet(info.focus.bbox)).pad(0.35), { maxZoom: 7 });
+        return;
+      }
       const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
       if (info?.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
       map.fitBounds(b.pad(0.05));
@@ -357,6 +396,22 @@ async function boot() {
       const nowF = obs.find(o => o.id === c.obsId)?.tempF ?? null;
       if (forecastPanel.showAlmanac(c, { nowF, dateLabel: almanacSource.dateLabel() })) clearInterval(t);
     }, 500);
+  }
+  if (params.has('frost')) {
+    // ?frost forces the frost/freeze page once its data arrives; ?frost=N
+    // picks a city by index.
+    const idx = Number(params.get('frost')) || 0;
+    const t = setInterval(() => {
+      const c = frostSource.get()[idx];
+      if (!c) return;
+      if (forecastPanel.showFrost(c)) clearInterval(t);
+    }, 500);
+  }
+  if (params.has('moon')) {
+    // ?moon forces the moon-phases page — computed locally, nothing to wait
+    // on, but delayed past the director's first overview tick (which hides
+    // the panel); ?panel/?almanac dodge that only because they wait on data.
+    setTimeout(() => forecastPanel.showMoon(), 2_500);
   }
 }
 

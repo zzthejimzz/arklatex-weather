@@ -10,7 +10,7 @@
 import L from 'leaflet';
 import { PRECIP_LUT } from './precip-lut.js';
 import { pointInGeometry } from '../utils/geometry.js';
-import { nearestPlace } from './cities.js';
+import { nearestPlaceLabel } from './cities.js';
 
 const BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0';
 export const PERIODS = [
@@ -159,7 +159,8 @@ export function createRainfallLayer(map, geo) {
       }
     }
     if (maxMm < MIN_MAX_MM) return null;
-    return { maxMm, place: nearestPlace(maxLat, maxLon) };
+    // place includes the relation word ("near X" / "12 mi NW of X").
+    return { maxMm, place: nearestPlaceLabel(maxLat, maxLon) };
   }
 
   async function scan() {
