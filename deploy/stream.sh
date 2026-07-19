@@ -8,6 +8,12 @@
 # Required env (from /etc/arklatex.env):
 #   YOUTUBE_STREAM_KEY  from studio.youtube.com → Go Live → Stream settings
 #   MUSIC_FILE          absolute path to the royalty-free loop (mp3/m4a)
+# Optional env:
+#   MUSIC_VOLUME        linear gain multiplier for the music bed (default 0.4,
+#                        i.e. -8 dB) — OBS's volume slider has no equivalent
+#                        here, so this is that control. 1.0 = file's native
+#                        level, 0.5 = half as loud. Edit + `systemctl restart
+#                        arklatex-stream` to retune, no rebuild needed.
 set -euo pipefail
 
 DISPLAY_NUM=:99
@@ -16,6 +22,7 @@ FPS=30
 PAGE_URL="http://127.0.0.1:8080/"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY:?set in /etc/arklatex.env}"
 : "${MUSIC_FILE:?set in /etc/arklatex.env}"
+: "${MUSIC_VOLUME:=0.4}"
 
 cleanup() { kill 0 2>/dev/null || true; }
 trap cleanup EXIT
@@ -47,6 +54,7 @@ ffmpeg -loglevel warning \
   -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_NUM" \
   -stream_loop -1 -i "$MUSIC_FILE" \
   -map 0:v -map 1:a \
+  -af "volume=${MUSIC_VOLUME}" \
   -c:v libx264 -preset veryfast -pix_fmt yuv420p \
   -b:v 6000k -maxrate 6000k -bufsize 12M -g $((FPS * 2)) \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \

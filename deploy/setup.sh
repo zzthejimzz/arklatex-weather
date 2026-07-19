@@ -32,6 +32,7 @@ if [[ ! -f /etc/arklatex.env ]]; then
   cat > /etc/arklatex.env <<'EOF'
 YOUTUBE_STREAM_KEY=paste-key-from-youtube-studio
 MUSIC_FILE=/var/lib/arklatex/music/loop.mp3
+# MUSIC_VOLUME=0.4   # linear gain on the music bed; uncomment to override the default
 EOF
   chmod 600 /etc/arklatex.env
   mkdir -p /var/lib/arklatex/music

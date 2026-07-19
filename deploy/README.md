@@ -65,6 +65,9 @@ ticks, so hashes differ).
   build && systemctl restart arklatex-stream` (serve.js reads dist/ per
   request — the stream restart is just to reload Chromium).
 - **Rotate the stream key**: edit `/etc/arklatex.env`, restart the stream unit.
+- **Music too loud/quiet**: there's no OBS-style fader on the VPS — set
+  `MUSIC_VOLUME` in `/etc/arklatex.env` (linear gain, default `0.4`; `1.0` is
+  the file's native level) and `systemctl restart arklatex-stream`.
 - **12-hour archive cap**: a continuous stream simply isn't archived past
   12 h. If you want VODs, add a timer that restarts `arklatex-stream`
   nightly at ~4 am CT — a ~15 s blip while YouTube rolls a new archive.
