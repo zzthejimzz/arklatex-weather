@@ -32,6 +32,8 @@ DISPLAY=$DISPLAY_NUM chromium \
   --window-size=1920,1080 --window-position=0,0 \
   --enable-unsafe-swiftshader \
   --autoplay-policy=no-user-gesture-required \
+  --disable-background-timer-throttling \
+  --disable-renderer-backgrounding \
   --noerrdialogs --disable-infobars --hide-scrollbars \
   --disable-dev-shm-usage \
   --force-device-scale-factor=1 \
@@ -42,7 +44,7 @@ sleep 8  # let the page boot before frames start flowing
 
 # 6 Mbps x264, 2-second keyframes (YouTube's ask), music loops forever.
 ffmpeg -loglevel warning \
-  -f x11grab -framerate "$FPS" -video_size "$SIZE" -i "$DISPLAY_NUM" \
+  -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_NUM" \
   -stream_loop -1 -i "$MUSIC_FILE" \
   -map 0:v -map 1:a \
   -c:v libx264 -preset veryfast -pix_fmt yuv420p \

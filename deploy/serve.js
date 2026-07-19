@@ -14,7 +14,16 @@ import { fileURLToPath } from 'node:url';
 const PORT = Number(process.argv[2]) || 8080;
 const DIST = join(fileURLToPath(import.meta.url), '../../dist');
 
-const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov']);
+const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com']);
+
+// Pollen.com's keyless API 403s without a pollen.com Referer + browser
+// User-Agent pair — attach them for that host only.
+const HOST_HEADERS = {
+  'www.pollen.com': {
+    referer: 'https://www.pollen.com/',
+    'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+  },
+};
 const PROXY_TTL_MS = 5 * 60 * 1000;
 const proxyCache = new Map(); // url → { at, status, type, body }
 
@@ -54,7 +63,7 @@ async function handleProxy(req, res, target) {
     // identity: WPC's server sometimes pairs a fresh geojson with a stale
     // EMPTY gzip variant (200, zero bytes) — asking for gzip gets nothing.
     const upstream = await fetch(target, {
-      headers: { 'accept-encoding': 'identity' },
+      headers: { 'accept-encoding': 'identity', ...(HOST_HEADERS[url.hostname] ?? {}) },
       signal: AbortSignal.timeout(15000),
     });
     const body = Buffer.from(await upstream.arrayBuffer());

@@ -8,6 +8,7 @@
 import { pointInGeometry } from '../utils/geometry.js';
 import { fetchWithTimeout } from '../utils/net.js';
 import { track } from '../utils/health.js';
+import { icon } from '../ui/icons.js';
 
 const LSR_URL = 'https://mesonet.agron.iastate.edu/geojson/lsr.geojson?hours=3&states=AR,LA,TX,OK';
 const POLL_MS = 2 * 60 * 1000;
@@ -21,15 +22,15 @@ const TOUR_PRIORITY = 50;
 // typetext → visual identity + base tour priority. Colors echo the alert
 // palette (utils/alert-style.js) so a hail report reads with hail-ish cyan etc.
 const TYPES = [
-  [/TORNADO/i,               { icon: '🌪️', label: 'Tornado',      color: '#ff2b2b', priority: 100 }],
-  [/TSTM WND DMG/i,          { icon: '🌳', label: 'Wind Damage',  color: '#ffd23f', priority: 80 }],
-  [/FUNNEL/i,                { icon: '🌪️', label: 'Funnel Cloud', color: '#ff8c1a', priority: 70 }],
-  [/FLASH FLOOD/i,           { icon: '🌊', label: 'Flash Flooding', color: '#2ecc55', priority: 65 }],
-  [/FLOOD/i,                 { icon: '💧', label: 'Flooding',     color: '#00a878', priority: 60 }],
-  [/HAIL/i,                  { icon: '🧊', label: 'Hail',         color: '#22d3ee', priority: 60 }],
-  [/TSTM WND GST|HIGH WIND/i,{ icon: '💨', label: 'Wind Gust',    color: '#d8b25c', priority: 55 }],
-  [/HEAVY RAIN/i,            { icon: '🌧️', label: 'Heavy Rain',   color: '#57d9a3', priority: 40 }],
-  [/LIGHTNING/i,             { icon: '⚡', label: 'Lightning',    color: '#a855f7', priority: 40 }],
+  [/TORNADO/i,               { icon: icon('tornado'),     label: 'Tornado',      color: '#ff2b2b', priority: 100 }],
+  [/TSTM WND DMG/i,          { icon: icon('wind-damage'), label: 'Wind Damage',  color: '#ffd23f', priority: 80 }],
+  [/FUNNEL/i,                { icon: icon('funnel'),      label: 'Funnel Cloud', color: '#ff8c1a', priority: 70 }],
+  [/FLASH FLOOD/i,           { icon: icon('flash-flood'), label: 'Flash Flooding', color: '#2ecc55', priority: 65 }],
+  [/FLOOD/i,                 { icon: icon('flood'),       label: 'Flooding',     color: '#00a878', priority: 60 }],
+  [/HAIL/i,                  { icon: icon('hail'),        label: 'Hail',         color: '#22d3ee', priority: 60 }],
+  [/TSTM WND GST|HIGH WIND/i,{ icon: icon('wind'),        label: 'Wind Gust',    color: '#d8b25c', priority: 55 }],
+  [/HEAVY RAIN/i,            { icon: icon('rain'),        label: 'Heavy Rain',   color: '#57d9a3', priority: 40 }],
+  [/LIGHTNING/i,             { icon: icon('lightning'),   label: 'Lightning',    color: '#a855f7', priority: 40 }],
 ];
 
 function styleForType(typetext = '') {
@@ -37,7 +38,7 @@ function styleForType(typetext = '') {
     if (re.test(typetext)) return style;
   }
   const label = typetext.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-  return { icon: '📋', label: label || 'Storm Report', color: '#9bb0d3', priority: 30 };
+  return { icon: icon('report'), label: label || 'Storm Report', color: '#9bb0d3', priority: 30 };
 }
 
 function formatMagnitude(p) {

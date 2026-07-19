@@ -1,8 +1,9 @@
 // SPC outlook overlay (categorical + Day 1/2 tornado/wind/hail probabilities).
 // Sits in overlayPane (z 400) below the radar pane so echoes read on top of
 // the risk fills. Day 1 categorical stays on at low opacity as ambient
-// context; the idle tour re-shows days 1–3 (and the Day 1/2 hazard
-// probabilities) emphasized.
+// context, except General Thunder (TSTM), whose green can be mistaken for
+// radar echoes; the idle tour re-shows days 1–3 (and the Day 1/2 hazard
+// probabilities) emphasized with every tier visible.
 import L from 'leaflet';
 import { fetchOutlook } from '../utils/spc-api.js';
 import { styleForFeature, normalizeLabel, HAZARD_MAPS } from '../utils/map-colors.js';
@@ -42,6 +43,7 @@ export function createOutlookLayer(map, geo) {
 
     const next = L.geoJSON(data, {
       interactive: false,
+      filter: f => emphasize || hazard !== 'cat' || normalizeLabel(f) !== 'TSTM',
       style: f => {
         const s = styleForFeature(hazard, f);
         return {

@@ -23,6 +23,11 @@ import { createRiverGaugeLayer } from './map/river-gauge-layer.js';
 import { createRiverGaugeSource } from './data/river-gauges.js';
 import { createAlmanacSource } from './data/almanac.js';
 import { createFrostSource } from './data/frost.js';
+import { createUvSource } from './data/uv.js';
+import { createAqiSource } from './data/aqi.js';
+import { createPollenSource } from './data/pollen.js';
+import { createPollenLayer } from './map/pollen-layer.js';
+import { createAuroraSource } from './data/aurora.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -42,6 +47,9 @@ import { track, startWatchdog } from './utils/health.js';
 import { createStatusChip } from './ui/status-chip.js';
 import { startSoakMonitor } from './utils/soak.js';
 import { radarCacheSize } from './map/radar-loop.js';
+import {
+  VISUAL_FIXTURES, createVisualAlertSource, createVisualForecasts, createVisualWarningSource,
+} from './data/visual-fixtures.js';
 
 const STAGE_W = 1920;
 const STAGE_H = 1080;
@@ -72,6 +80,9 @@ async function loadGeo() {
 async function boot() {
   fitStage();
   window.addEventListener('resize', fitStage);
+  const params = new URLSearchParams(location.search);
+  const visualTest = params.has('visual-test');
+  if (visualTest) document.documentElement.dataset.visualTest = '';
 
   const [geo] = await Promise.all([loadGeo(), loadPopulationGrid()]);
 
@@ -83,7 +94,7 @@ async function boot() {
   const mcdLayer = createMcdLayer(map);
 
   const outlookLayer = createOutlookLayer(map, geo);
-  outlookLayer.show('day1');
+  if (!visualTest) outlookLayer.show('day1');
 
   const alertsLayer = createAlertsLayer(map);
   const banner = createBanner(document.getElementById('banner'));
@@ -93,8 +104,8 @@ async function boot() {
   // Shared surface observations: the ticker's temp strip and the director's
   // current-temps map mode read the same feed.
   const obsSource = createObservationsSource();
-  obsSource.start();
-  const ticker = createTicker(document.getElementById('ticker'), geo, obsSource);
+  if (!visualTest) obsSource.start();
+  const ticker = createTicker(document.getElementById('ticker'), geo, obsSource, { live: !visualTest });
   const tempsLayer = createTempsLayer(map);
 
   // Quiet-day map modes: GOES satellite imagery, MRMS rainfall totals
@@ -102,56 +113,76 @@ async function boot() {
   const satelliteLayer = createSatelliteLayer(map, geo);
   const rainfallLayer = createRainfallLayer(map, geo);
   const droughtSource = createDroughtSource(geo);
-  droughtSource.start();
+  if (!visualTest) droughtSource.start();
   const droughtLayer = createDroughtLayer(map);
 
   // WPC excessive rainfall outlook — only airs when a risk area touches the region.
   const eroSource = createEroSource(geo);
-  eroSource.start();
+  if (!visualTest) eroSource.start();
   const eroLayer = createEroLayer(map);
 
   // SPC fire weather outlook — only airs when an Elevated+ area touches the region.
   const firewxSource = createFireWxSource(geo);
-  firewxSource.start();
+  if (!visualTest) firewxSource.start();
   const firewxLayer = createFireWxLayer(map);
 
   // NHC tropical outlook — only airs when the Atlantic has a development area.
   const tropicalSource = createTropicalSource();
-  tropicalSource.start();
+  if (!visualTest) tropicalSource.start();
   const tropicalLayer = createTropicalLayer(map);
 
   // NWS river gauge flood status — only airs when a gauge locally is at
   // action stage or above, or unusually low.
   const riverSource = createRiverGaugeSource(geo);
-  riverSource.start();
+  if (!visualTest) riverSource.start();
   const riverLayer = createRiverGaugeLayer(map);
 
   // Daily climate almanac: normals + records for the climate cities.
   const almanacSource = createAlmanacSource();
-  almanacSource.start();
+  if (!visualTest) almanacSource.start();
 
   // Frost/freeze & growing-season normals for the climate cities — static
   // data, fetched once.
   const frostSource = createFrostSource();
-  frostSource.start();
+  if (!visualTest) frostSource.start();
 
-  const forecasts = createCityForecasts();
+  // UV Index (EPA daily forecast) and air quality (Open-Meteo US AQI) for
+  // the climate cities — both keyless, refreshed feeds like the ticker temps.
+  const uvSource = createUvSource();
+  if (!visualTest) uvSource.start();
+  const aqiSource = createAqiSource();
+  if (!visualTest) aqiSource.start();
+
+  // Pollen index (Pollen.com/IQVIA) for the climate cities — map dots +
+  // one-city detail card in the same director stop.
+  const pollenSource = createPollenSource();
+  if (!visualTest) pollenSource.start();
+  const pollenLayer = createPollenLayer(map);
+
+  // Aurora / geomagnetic-storm outlook — NOAA SWPC Kp index + G-scale.
+  // National product like the tropical outlook: no locality gate, just an
+  // always-available quiet-day filler.
+  const auroraSource = createAuroraSource();
+  if (!visualTest) auroraSource.start();
+
+  const forecasts = visualTest ? createVisualForecasts() : createCityForecasts();
   forecasts.start();
   const forecastPanel = createForecastPanel({
     root: document.getElementById('forecast-root'), map, forecasts,
   });
 
-  const params = new URLSearchParams(location.search);
   const replayName = params.get('replay');
-  const source = replayName
-    ? createReplaySource(geo, replayName, { loop: params.has('loop') })
-    : createLiveSource(geo);
+  const source = visualTest && replayName === 'visual-warning'
+    ? createVisualWarningSource(geo)
+    : replayName
+      ? createReplaySource(geo, replayName, { loop: params.has('loop') })
+      : visualTest ? createVisualAlertSource() : createLiveSource(geo);
 
   // Local Storm Reports (ground truth pins + director tour stops). Live only —
   // current real-world reports would be incongruent over a replayed outbreak.
   const reportsLayer = createReportsLayer(map);
   let latestReports = [];
-  if (!replayName) {
+  if (!replayName && !visualTest) {
     createReportsSource(geo).start(({ reports, added }) => {
       reportsLayer.update(reports, added);
       latestReports = reports;
@@ -169,10 +200,12 @@ async function boot() {
   // the tour can be exercised when there's no live MCD over the region).
   let latestMcds = [];
   const mcdSource = replayName ? createMcdReplaySource(geo, replayName) : createMcdSource(geo);
-  mcdSource.start(({ mcds }) => {
-    mcdLayer.update(mcds);
-    latestMcds = mcds;
-  });
+  if (!visualTest) {
+    mcdSource.start(({ mcds }) => {
+      mcdLayer.update(mcds);
+      latestMcds = mcds;
+    });
+  }
   const mcdFeed = {
     get: () => pickTourMcds(latestMcds),
     all: () => latestMcds,
@@ -187,6 +220,8 @@ async function boot() {
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
     riverLayer, riverFeed: riverSource,
     almanacFeed: almanacSource, frostFeed: frostSource,
+    uvFeed: uvSource, aqiFeed: aqiSource,
+    pollenLayer, pollenFeed: pollenSource, auroraFeed: auroraSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -207,7 +242,7 @@ async function boot() {
     status => (status.ok ? alertsBeat.ok() : alertsBeat.attempt()),
   );
 
-  startWatchdog();
+  if (!visualTest) startWatchdog();
   if (params.has('soak')) {
     startSoakMonitor({ map, extras: { imgCache: radarCacheSize } });
   }
@@ -302,13 +337,14 @@ async function boot() {
       eroLayer.show(features);
     }, 500);
   } else if (params.has('river')) {
-    // Dev-only: park wide with river gauge pins once a notable reading arrives.
+    // Dev-only: park wide with river gauge pins once a notable reading
+    // arrives, pulsing the worst gauge like the director's shot does.
     map.fitBounds(regionBounds);
     const t = setInterval(() => {
       const gauges = riverSource.get();
       if (!gauges.length) return;
       clearInterval(t);
-      riverLayer.show(gauges);
+      riverLayer.show(gauges, riverSource.worst().lid);
     }, 500);
   } else if (params.has('fire')) {
     // Dev-only: park with the fire weather fills once they arrive, framed to
@@ -375,27 +411,44 @@ async function boot() {
       if (info?.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
       map.fitBounds(b.pad(0.05));
     }, 500);
+  } else if (visualTest && replayName) {
+    director.boot();
+  } else if (visualTest) {
+    map.fitBounds(regionBounds);
+    radar.setHidden(true);
+    outlookLayer.hide();
+    document.documentElement.dataset.visualReady = 'overview';
   } else {
     director.boot();
   }
   if (params.has('panel')) {
     // ?panel forces the 3-day board; ?panel=city forces the 7-day spotlight.
     const city = params.get('panel') === 'city';
-    const t = setInterval(() => {
-      if (city ? forecastPanel.showCity(0) : forecastPanel.show()) clearInterval(t);
-    }, 500);
+    if (visualTest) {
+      city ? forecastPanel.showCity(0) : forecastPanel.show();
+      document.documentElement.dataset.visualReady = 'forecast';
+    } else {
+      const t = setInterval(() => {
+        if (city ? forecastPanel.showCity(0) : forecastPanel.show()) clearInterval(t);
+      }, 500);
+    }
   }
   if (params.has('almanac')) {
     // ?almanac forces the almanac page once its data arrives; ?almanac=N
     // picks a city by index.
     const idx = Number(params.get('almanac')) || 0;
-    const t = setInterval(() => {
-      const c = almanacSource.get()[idx];
-      const obs = obsSource.get();
-      if (!c || !obs.length) return; // wait for both feeds so the Now hero shows
-      const nowF = obs.find(o => o.id === c.obsId)?.tempF ?? null;
-      if (forecastPanel.showAlmanac(c, { nowF, dateLabel: almanacSource.dateLabel() })) clearInterval(t);
-    }, 500);
+    if (visualTest) {
+      forecastPanel.showAlmanac(VISUAL_FIXTURES.almanac, { nowF: 98, dateLabel: 'July 19' });
+      document.documentElement.dataset.visualReady = 'almanac';
+    } else {
+      const t = setInterval(() => {
+        const c = almanacSource.get()[idx];
+        const obs = obsSource.get();
+        if (!c || !obs.length) return; // wait for both feeds so the Now hero shows
+        const nowF = obs.find(o => o.id === c.obsId)?.tempF ?? null;
+        if (forecastPanel.showAlmanac(c, { nowF, dateLabel: almanacSource.dateLabel() })) clearInterval(t);
+      }, 500);
+    }
   }
   if (params.has('frost')) {
     // ?frost forces the frost/freeze page once its data arrives; ?frost=N
@@ -407,11 +460,83 @@ async function boot() {
       if (forecastPanel.showFrost(c)) clearInterval(t);
     }, 500);
   }
+  if (params.has('uv')) {
+    // ?uv forces the UV index page once its data arrives; ?uv=N picks a city
+    // by index.
+    const idx = Number(params.get('uv')) || 0;
+    if (visualTest) {
+      forecastPanel.showUv(VISUAL_FIXTURES.uv);
+      document.documentElement.dataset.visualReady = 'uv';
+    } else {
+      const t = setInterval(() => {
+        const c = uvSource.get()[idx];
+        if (!c) return;
+        if (forecastPanel.showUv(c)) clearInterval(t);
+      }, 500);
+    }
+  }
+  if (params.has('aqi')) {
+    // ?aqi forces the air quality page once its data arrives; ?aqi=N picks a
+    // city by index.
+    const idx = Number(params.get('aqi')) || 0;
+    if (visualTest) {
+      forecastPanel.showAqi(VISUAL_FIXTURES.aqi);
+      document.documentElement.dataset.visualReady = 'aqi';
+    } else {
+      const t = setInterval(() => {
+        const c = aqiSource.get()[idx];
+        if (!c) return;
+        if (forecastPanel.showAqi(c)) clearInterval(t);
+      }, 500);
+    }
+  }
+  if (params.has('pollen')) {
+    // ?pollen forces the pollen page + every city's map dot once the data
+    // arrives; ?pollen=N picks the card's city by index.
+    const idx = Number(params.get('pollen')) || 0;
+    if (visualTest) {
+      const cities = VISUAL_FIXTURES.pollen;
+      forecastPanel.showPollen(cities[idx]);
+      pollenLayer.show(cities);
+      document.documentElement.dataset.visualReady = 'pollen';
+    } else {
+      const t = setInterval(() => {
+        const cities = pollenSource.get();
+        const c = cities[idx];
+        if (!c) return;
+        if (forecastPanel.showPollen(c)) {
+          pollenLayer.show(cities);
+          clearInterval(t);
+        }
+      }, 500);
+    }
+  }
+  if (params.has('aurora')) {
+    // Dev-only: ?aurora forces the aurora/Kp page once its data arrives.
+    // The SWPC fetch is fast enough to occasionally beat the director's
+    // first overview tick (which hides the panel) — same race ?moon dodges
+    // below, so start the retry loop after the same delay.
+    if (visualTest) {
+      forecastPanel.showAurora(VISUAL_FIXTURES.aurora);
+      document.documentElement.dataset.visualReady = 'aurora';
+    } else {
+      setTimeout(() => {
+        const t = setInterval(() => {
+          if (forecastPanel.showAurora(auroraSource.get())) clearInterval(t);
+        }, 500);
+      }, 2_500);
+    }
+  }
   if (params.has('moon')) {
     // ?moon forces the moon-phases page — computed locally, nothing to wait
     // on, but delayed past the director's first overview tick (which hides
     // the panel); ?panel/?almanac dodge that only because they wait on data.
-    setTimeout(() => forecastPanel.showMoon(), 2_500);
+    if (visualTest) {
+      forecastPanel.showMoon();
+      document.documentElement.dataset.visualReady = 'moon';
+    } else {
+      setTimeout(() => forecastPanel.showMoon(), 2_500);
+    }
   }
 }
 

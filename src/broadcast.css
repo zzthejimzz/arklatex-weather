@@ -1,3 +1,59 @@
+/* ─── Self-hosted fonts (STYLE_GUIDE.md §2) ─────────────────────────── */
+/* Static .woff2 cuts vendored in public/fonts/ — no CDN/Google Fonts call,
+   this renders headless for a broadcast encoder (possibly offline).
+   font-display: block, never swap — every frame gets encoded, so a flash of
+   fallback font would go out on air. OFL licenses sit beside the files. */
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/manrope/Manrope-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/manrope/Manrope-Medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/manrope/Manrope-SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/manrope/Manrope-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'Manrope';
+  src: url('/fonts/manrope/Manrope-ExtraBold.woff2') format('woff2');
+  font-weight: 800; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: 400; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Medium.woff2') format('woff2');
+  font-weight: 500; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-SemiBold.woff2') format('woff2');
+  font-weight: 600; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-Bold.woff2') format('woff2');
+  font-weight: 700; font-style: normal; font-display: block;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono/JetBrainsMono-ExtraBold.woff2') format('woff2');
+  font-weight: 800; font-style: normal; font-display: block;
+}
+
 /* ─── Design tokens (shared with jim's Website) ─────────────────────── */
 :root {
   --bg-base:      #080c14;
@@ -14,13 +70,161 @@
   --accent-purple:#a855f7;
   --accent-green: #22c55e;
   --accent-red:   #ef4444;
-  --font-sans:    'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono:    'JetBrains Mono', 'Cascadia Mono', 'Courier New', monospace;
+  --font-sans:    'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono:    'JetBrains Mono', 'Cascadia Mono', 'Consolas', monospace;
   --banner-h:     96px;
   --ticker-h:     52px;
+
+  /* Icon system (STYLE_GUIDE.md §3) */
+  --icon-stroke: 1.75;      /* compact 24×24 utility marks */
+  --weather-icon-stroke: 2.2; /* weather/hazard marks use a 32×32 optical grid */
+  --icon-size-xs: 15px;     /* river-pin glyph scale (river-pin is 30px circle) */
+  --icon-size-sm: 19px;     /* warn-row / ticker glyph scale */
+  --icon-size-md: 34px;     /* lsr-pin glyph, moon-row icon */
+  --icon-size-lg: 42px;     /* fc-ico forecast icon */
+  --icon-size-xl: 84px;     /* moon-hero icon */
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ─── Icon system (ui/icons.js — STYLE_GUIDE.md §6/§11) ─────────────── */
+/* Inline SVG artwork replaces the old emoji glyphs. 1em sizing keeps the
+   existing font-size rules on every container (.fc-ico, .tk-icon, .w-icon,
+   .lsr-pin, …) sizing icons exactly the way they sized emoji, and
+   currentColor propagation means the parent's `color` (via --lsr-color /
+   --river-color / --alert-color etc.) tints the icon, same as the old
+   ring-color pattern. */
+svg.icon {
+  width: 1em; height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  flex: none;
+}
+
+/* Forecast conditions use semantic color while the same SVGs remain
+   monochrome in alert cards, chips, and map markers. */
+:is(.fc-ico, .sr-ico, .weather-colored) { color: #f3f7ff; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-cloud {
+  fill: #70839e;
+  fill-opacity: 0.94;
+  stroke: #dce7f6;
+}
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-sun {
+  fill: #fbbf24;
+  fill-opacity: 1;
+  stroke: #fcd34d;
+}
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-sun-ray { stroke: #fcd34d; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-precip { fill: #38bdf8; stroke: #38bdf8; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-bolt { fill: #fde047; stroke: #fde047; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-ice { fill: #7dd3fc; stroke: #7dd3fc; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-hot { fill: #fb7185; stroke: #fb7185; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-wind { stroke: #a5b4fc; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-fog { stroke: #cbd5e1; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-funnel { stroke: #fb7185; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-water { stroke: #2dd4bf; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-water[fill] { fill: #2dd4bf; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-hail { fill: #e0f2fe; stroke: #e0f2fe; }
+:is(.fc-ico, .sr-ico, .weather-colored) .wx-fire { fill: #fb923c; stroke: #fb923c; }
+
+/* Smaller broadcast surfaces use the same semantic parts without receiving
+   the large forecast sizing treatment. */
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-cloud {
+  fill: #70839e;
+  fill-opacity: 0.94;
+  stroke: #dce7f6;
+}
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-sun { fill: #fbbf24; stroke: #fcd34d; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-sun-ray { stroke: #fcd34d; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-precip { fill: #38bdf8; stroke: #38bdf8; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-bolt { fill: #fde047; stroke: #fde047; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-ice { fill: #7dd3fc; stroke: #7dd3fc; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-hot { fill: #fb7185; stroke: #fb7185; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-wind { stroke: #a5b4fc; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-fog { stroke: #cbd5e1; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-funnel { stroke: #fb7185; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-water { fill: #2dd4bf; stroke: #2dd4bf; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-hail { fill: #e0f2fe; stroke: #e0f2fe; }
+:is(.tk-icon, #mode-chip, #outlook-chip) .wx-fire { fill: #fb923c; stroke: #fb923c; }
+
+/* Domain artwork receives color in information panels and review samples.
+   Alert/map instances remain monochrome because these selectors do not reach
+   severity containers. */
+:is(#forecast-root, .domain-colored) .moon-icon { color: #9fb0cc; }
+:is(#forecast-root, .domain-colored) .moon-light {
+  fill: #f4e4a6;
+  fill-opacity: 1;
+  stroke: #fff2bd;
+}
+:is(#forecast-root, .domain-colored) .moon-shadow {
+  fill: #26344b;
+  fill-opacity: 1;
+  stroke: #8293af;
+}
+:is(#forecast-root, .domain-colored) .moon-phase-shadow {
+  fill: #26344b;
+  fill-opacity: 1;
+  stroke: none;
+}
+:is(#forecast-root, .domain-colored) .moon-crater { fill: #a99158; }
+:is(#forecast-root, .domain-colored) .moon-star { stroke: #fde68a; }
+
+:is(#forecast-root, .domain-colored) .botanical-leaf,
+:is(#forecast-root, .domain-colored) .season-spring {
+  fill: #4ade80;
+  fill-opacity: 0.32;
+  stroke: #86efac;
+}
+:is(#forecast-root, .domain-colored) .botanical-stem { stroke: #84cc16; }
+:is(#forecast-root, .domain-colored) .botanical-trunk { stroke: #d8b25c; }
+:is(#forecast-root, .domain-colored) .pollen-core { fill: #facc15; stroke: #facc15; }
+:is(#forecast-root, .domain-colored) .season-fall {
+  fill: #fb923c;
+  fill-opacity: 0.35;
+  stroke: #fdba74;
+}
+:is(#forecast-root, .domain-colored) .domain-fill {
+  fill: #38bdf8;
+  fill-opacity: 0.15;
+  stroke: #7dd3fc;
+}
+:is(#forecast-root, .domain-colored) .domain-accent { fill: #fbbf24; stroke: #fbbf24; }
+:is(#forecast-root, .domain-colored) .wx-ice { fill: #7dd3fc; stroke: #7dd3fc; }
+#forecast-root .river-drop { fill: #38bdf8; stroke: #38bdf8; }
+
+/* Semi-filled utility marks keep a restrained base and a clear cyan signal.
+   Warning metadata deliberately inherits its alert color instead. */
+:is(.fc-title, .tk-icon, #mode-chip, #outlook-chip, .utility-colored) .ui-fill {
+  fill: #38bdf8;
+  fill-opacity: 0.14;
+}
+:is(.fc-title, .tk-icon, #mode-chip, #outlook-chip, .utility-colored) .ui-accent {
+  fill: #38bdf8;
+  stroke: #38bdf8;
+}
+:is(.fc-title, .tk-icon, #mode-chip, #outlook-chip, .utility-colored) .radar-sweep,
+:is(.fc-title, .tk-icon, #mode-chip, #outlook-chip, .utility-colored) .cyclone-band {
+  fill: #38bdf8;
+  fill-opacity: 0.82;
+  stroke: #38bdf8;
+}
+:is(.fc-title, .tk-icon, #mode-chip, #outlook-chip, .utility-colored) .radar-return {
+  fill: #facc15;
+  stroke: #facc15;
+}
+:is(#forecast-root, .utility-colored) .aurora-ray { stroke: #4ade80; }
+:is(.tk-icon, .utility-colored) .solar-disc {
+  fill: #fbbf24;
+  fill-opacity: 1;
+  stroke: #fcd34d;
+}
+:is(.tk-icon, .utility-colored) .solar-ray { stroke: #fcd34d; }
+/* Containers whose glyph scale matches the --icon-size-* tokens (§3) are
+   pinned to the token so the scale stays canonical. */
+.river-pin svg.icon { width: var(--icon-size-xs); height: var(--icon-size-xs); }
+.warn-row .w-icon svg.icon { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+.fc-ico svg.icon { width: var(--icon-size-lg); height: var(--icon-size-lg); }
+.moon-hero .mh-emoji svg.icon { width: var(--icon-size-xl); height: var(--icon-size-xl); }
 
 html, body {
   width: 100%; height: 100%;
@@ -165,7 +369,7 @@ html, body {
 .count-chip.tone-green  { border-color: rgba(34,197,94,0.6);  }
 .count-chip.tone-green .count  { color: var(--accent-green); }
 .count-chip.tone-blue .count   { color: var(--accent-blue); }
-.counts-none { font-size: 16px; color: var(--text-faint); }
+.counts-none { font-size: 16px; color: var(--text-muted); }
 
 /* ─── Warning popup card ────────────────────────────────────────────── */
 #popup-root {
@@ -213,7 +417,7 @@ html, body {
   display: flex; align-items: baseline; gap: 12px;
   font-size: 18px;
 }
-.warn-row .w-icon { flex: 0 0 28px; text-align: center; font-size: 19px; }
+.warn-row .w-icon { flex: 0 0 28px; text-align: center; font-size: 19px; color: var(--alert-color, var(--text-primary)); }
 .warn-row .w-label { color: var(--text-muted); flex: 0 0 118px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; }
 .warn-row .w-value { font-weight: 600; font-family: var(--font-mono); }
 .warn-row .w-value.hot { color: var(--accent-amber); }
@@ -274,6 +478,7 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 17px; line-height: 1;
+  color: var(--lsr-color, #fff); /* SVG glyph tints via currentColor */
   background: rgba(15, 22, 35, 0.92);
   border: 2.5px solid var(--lsr-color, #fff);
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.5);
@@ -318,6 +523,7 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   width: 30px; height: 30px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 15px; line-height: 1;
+  color: var(--river-color, #fff); /* SVG glyph tints via currentColor */
   background: rgba(15, 22, 35, 0.92);
   border: 2.5px solid var(--river-color, #fff);
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.5);
@@ -391,10 +597,10 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .leaflet-container { background: var(--bg-base); font-family: var(--font-sans); }
 .leaflet-control-attribution {
   background: rgba(8, 12, 20, 0.7) !important;
-  color: var(--text-faint) !important;
+  color: var(--text-muted) !important;
   font-size: 10px !important;
 }
-.leaflet-control-attribution a { color: var(--text-faint) !important; }
+.leaflet-control-attribution a { color: var(--text-muted) !important; }
 .leaflet-control-zoom { display: none; } /* broadcast output — no interactive chrome */
 
 /* Curated city labels — overview zoom band only; kept small and quiet so the
@@ -479,7 +685,7 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   font-weight: 600; letter-spacing: 0.07em; margin-top: 2px;
 }
 .fc-short {
-  font-size: 13px; color: var(--text-faint); font-weight: 500;
+  font-size: 13px; color: var(--text-muted); font-weight: 500;
   margin-top: 6px; line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
@@ -629,6 +835,106 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   font-size: 16px; line-height: 1.4;
 }
 .frost-tip b { color: #4ade80; }
+
+/* UV Index page (rides the forecast panel) */
+.uv-track {
+  background: linear-gradient(90deg,
+    #4ade80 0%, #4ade80 16.667%,
+    #facc15 16.667%, #facc15 41.667%,
+    #fb923c 41.667%, #fb923c 58.333%,
+    #f87171 58.333%, #f87171 83.333%,
+    #c084fc 83.333%, #c084fc 100%);
+}
+.uv-alert { margin-top: 10px; color: #fbbf24; font-weight: 700; }
+.uv-tip { margin-top: 14px; }
+
+/* Air quality page (rides the forecast panel) */
+.aqi-track {
+  background: linear-gradient(90deg,
+    #4ade80 0%, #4ade80 12.5%,
+    #facc15 12.5%, #facc15 25%,
+    #fb923c 25%, #fb923c 37.5%,
+    #f87171 37.5%, #f87171 50%,
+    #c084fc 50%, #c084fc 75%,
+    #7f1d1d 75%, #7f1d1d 100%);
+}
+.aqi-row { grid-template-columns: repeat(3, 1fr); }
+.aqi-cell .ac-val { font-size: 34px; }
+.aqi-unit { margin-left: 4px; font-size: 14px; font-weight: 600; color: var(--text-muted); }
+.aqi-tip { margin-top: 14px; }
+
+/* Pollen page (rides the forecast panel) + pollen map chips */
+/* IQVIA category bands: 2.4 / 4.8 / 7.2 / 9.6 of 12 = every 20%. */
+.pollen-track {
+  background: linear-gradient(90deg,
+    #4ade80 0%, #4ade80 20%,
+    #a3e635 20%, #a3e635 40%,
+    #facc15 40%, #facc15 60%,
+    #fb923c 60%, #fb923c 80%,
+    #f87171 80%, #f87171 100%);
+}
+.pollen-trigs { display: flex; flex-wrap: wrap; gap: 10px; }
+.pollen-trig {
+  font-size: 19px; font-weight: 700;
+  padding: 9px 18px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+.pollen-trig.none { color: var(--text-muted); font-weight: 600; }
+.pollen-days {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;
+}
+.pollen-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 8px;
+}
+.pollen-day .pd-dow {
+  font-size: 15px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); font-family: var(--font-mono);
+}
+.pollen-day .pd-val { font-size: 44px; font-weight: 800; line-height: 1.1; }
+.pollen-tip { margin-top: 14px; }
+/* Map chip: temp-chip layout with a category-colored edge so the intensity
+   reads at a glance even before the number does. */
+.pollen-chip { border-color: var(--pollen-color, var(--border)); }
+
+/* Aurora / geomagnetic-storm page (rides the forecast panel) */
+.aur-track {
+  background: linear-gradient(90deg,
+    #4ade80 0%, #4ade80 55.6%,
+    #a3e635 55.6%, #a3e635 66.7%,
+    #facc15 66.7%, #facc15 77.8%,
+    #fb923c 77.8%, #fb923c 88.9%,
+    #f87171 88.9%, #f87171 97%,
+    #e879f9 97%, #e879f9 100%);
+}
+.aur-thresh {
+  position: absolute; top: -9px; bottom: -9px; width: 2px;
+  transform: translateX(-50%);
+  background: rgba(240, 244, 255, 0.85);
+}
+.aur-peak-line { margin-top: 10px; }
+.aur-list { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.aur-row {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 110px 150px 1fr;
+  align-items: center; gap: 14px;
+  border-top: 1px solid var(--border-light);
+}
+.aur-row .ar-day { font-size: 19px; font-weight: 700; }
+.aur-row .ar-pill {
+  justify-self: start;
+  font-size: 14px; font-weight: 700; letter-spacing: 0.02em;
+  padding: 5px 12px; border-radius: 999px; border: 1px solid; white-space: nowrap;
+}
+.aur-row .ar-vis { font-size: 15px; color: var(--text-muted); line-height: 1.3; }
+.aur-tip { margin-top: 12px; }
 
 /* Moon phases page (rides the forecast panel) */
 .moon-hero {

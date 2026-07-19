@@ -4,7 +4,14 @@ import { defineConfig } from 'vite';
 // `vite preview` doesn't implement — its SPA fallback answers with index.html
 // and every SPC fetch dies on res.json(). Mirror deploy/serve.js's proxy so
 // preview behaves like the real host. Whitelist-only, same as serve.js.
-const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov']);
+const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com']);
+
+// Pollen.com's keyless API 403s without a pollen.com Referer + browser
+// User-Agent pair (both static — verified the root referer is enough).
+const POLLEN_HEADERS = {
+  referer: 'https://www.pollen.com/',
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+};
 
 function previewSpcProxy() {
   return {
@@ -27,7 +34,10 @@ function previewSpcProxy() {
           // identity: WPC sometimes serves a stale EMPTY gzip variant next to
           // a fresh geojson — asking for gzip gets a 200 with zero bytes.
           const upstream = await fetch(target, {
-            headers: { 'accept-encoding': 'identity' },
+            headers: {
+              'accept-encoding': 'identity',
+              ...(url.hostname === 'www.pollen.com' ? POLLEN_HEADERS : {}),
+            },
             signal: AbortSignal.timeout(15000),
           });
           res.statusCode = upstream.status;
@@ -54,6 +64,12 @@ export default defineConfig({
         target: 'https://api.water.noaa.gov',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/nwps/, '/nwps/v1/gauges'),
+      },
+      '/api/pollen': {
+        target: 'https://www.pollen.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/pollen/, '/api'),
+        headers: POLLEN_HEADERS,
       },
       '/api/spc-fire': {
         target: 'https://www.spc.noaa.gov',

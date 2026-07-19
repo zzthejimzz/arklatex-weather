@@ -55,8 +55,10 @@ const BEHIND_KM = 3;   // just-passed still reads as "near ... now"
 const NEAR_NOW_KM = 5;
 const MAX_DEAD_RECKON_MS = 45 * 60 * 1000; // don't extrapolate stale motion forever
 
-export function townsInPath(motion, { now = Date.now(), max = 3 } = {}) {
+export function townsInPath(motion, { now = Date.now(), max = 3, expires = null } = {}) {
   if (!motion) return [];
+  const parsedExpiry = expires == null ? NaN : new Date(expires).getTime();
+  const latestEtaMs = Number.isFinite(parsedExpiry) ? parsedExpiry : Infinity;
   const th = (motion.toDeg * Math.PI) / 180;
   const ux = Math.sin(th);
   const uy = Math.cos(th);
@@ -76,6 +78,7 @@ export function townsInPath(motion, { now = Date.now(), max = 3 } = {}) {
       if (lateral > CORRIDOR_KM || along < -BEHIND_KM) continue;
       if (along > (motion.speedKmh * LOOKAHEAD_MIN) / 60) continue;
       const etaMs = now + (Math.max(0, along) / motion.speedKmh) * 3.6e6;
+      if (etaMs > latestEtaMs) continue;
       const prev = best.get(name);
       if (!prev || etaMs < prev.etaMs) {
         best.set(name, { name, lat: tlat, lon: tlon, etaMs, nearNow: along < NEAR_NOW_KM });

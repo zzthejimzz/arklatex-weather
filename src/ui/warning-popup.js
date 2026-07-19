@@ -5,6 +5,7 @@ import { formatPopulation } from '../data/population.js';
 import { formatLocalTime, countdown } from '../utils/time.js';
 import { compass8, townsInPath } from '../utils/storm-motion.js';
 import { MCD_COLOR } from '../map/mcd-layer.js';
+import { icon } from './icons.js';
 
 const STATE_NAMES = { TX: 'Texas', LA: 'Louisiana', AR: 'Arkansas', OK: 'Oklahoma' };
 
@@ -25,34 +26,34 @@ export function createPopup(root) {
     const p = alert.props;
 
     const rows = [];
-    rows.push(row('⏱️', 'Expires', `${formatLocalTime(p.expires)} · <span class="cd">${countdown(p.expires) ?? '—'}</span>`));
+    rows.push(row(icon('clock'), 'Expires', `${formatLocalTime(p.expires)} · <span class="cd">${countdown(p.expires) ?? '—'}</span>`));
 
     const detection = param(p, 'tornadoDetection');
-    if (detection) rows.push(row('📡', 'Source', titleCase(detection)));
+    if (detection) rows.push(row(icon('radar'), 'Source', titleCase(detection)));
 
     const threat = param(p, 'tornadoDamageThreat') ?? param(p, 'thunderstormDamageThreat') ?? param(p, 'flashFloodDamageThreat');
-    if (threat) rows.push(row('⚠️', 'Threat', titleCase(threat), true));
+    if (threat) rows.push(row(icon('warning'), 'Threat', titleCase(threat), true));
 
     const hail = param(p, 'maxHailSize');
     if (hail && parseFloat(hail) > 0) {
-      rows.push(row('🧊', 'Max hail', `${parseFloat(hail).toFixed(2)}"`));
+      rows.push(row(icon('hail'), 'Max hail', `${parseFloat(hail).toFixed(2)}"`));
     }
     const gust = param(p, 'maxWindGust');
-    if (gust) rows.push(row('💨', 'Max wind', /mph/i.test(gust) ? gust.toLowerCase() : `${gust} mph`));
+    if (gust) rows.push(row(icon('wind'), 'Max wind', /mph/i.test(gust) ? gust.toLowerCase() : `${gust} mph`));
 
     if (alert.motion) {
-      rows.push(row('🧭', 'Moving', `${compass8(alert.motion.toDeg)} at ${alert.motion.speedMph} mph`));
+      rows.push(row(icon('storm-motion'), 'Moving', `${compass8(alert.motion.toDeg)} at ${alert.motion.speedMph} mph`));
     }
 
     const pop = alert.population > 0 ? formatPopulation(alert.population) : null;
-    if (pop) rows.push(row('👥', 'In path', `~${pop} people`));
+    if (pop) rows.push(row(icon('population'), 'In path', `~${pop} people`));
 
-    rows.push(row('🕐', 'Issued', formatLocalTime(p.sent)));
+    rows.push(row(icon('clock'), 'Issued', formatLocalTime(p.sent)));
 
     // "Towns in the path" — the local-TV money line. ETAs are absolute
     // times, so the block stays honest between re-renders; it's recomputed
     // on every tour visit and every CON/EXT update.
-    const towns = townsInPath(alert.motion);
+    const towns = townsInPath(alert.motion, { expires: p.expires });
     const pathHtml = towns.length
       ? `<div class="warn-card-path">${towns.map(t =>
           `<span class="path-town"><b>${t.name}</b> ${t.nearNow ? 'now' : `~${formatLocalTime(new Date(t.etaMs).toISOString())}`}</span>`,
@@ -81,10 +82,10 @@ export function createPopup(root) {
   function showReport(report) {
     current = null; // no expiry countdown to tick
     const rows = [];
-    rows.push(row('🕐', 'Reported', `${formatLocalTime(report.valid)} · ${agoText(report.valid)}`));
-    if (report.magnitude) rows.push(row('📏', 'Magnitude', report.magnitude, true));
-    if (report.source) rows.push(row('🗣️', 'Source', titleCase(report.source)));
-    rows.push(row('🏢', 'Relayed by', `NWS ${report.wfo ?? '—'}`));
+    rows.push(row(icon('clock'), 'Reported', `${formatLocalTime(report.valid)} · ${agoText(report.valid)}`));
+    if (report.magnitude) rows.push(row(icon('magnitude'), 'Magnitude', report.magnitude, true));
+    if (report.source) rows.push(row(icon('speech'), 'Source', titleCase(report.source)));
+    rows.push(row(icon('office'), 'Relayed by', `NWS ${report.wfo ?? '—'}`));
 
     const state = STATE_NAMES[report.st] ?? report.st ?? '';
     const remark = (report.remark ?? '').trim();
@@ -108,19 +109,19 @@ export function createPopup(root) {
   function showMcd(mcd) {
     current = { props: { expires: mcd.expire } };
     const rows = [];
-    rows.push(row('⏱️', 'Valid until', `${formatLocalTime(mcd.expire)} · <span class="cd">${countdown(mcd.expire) ?? '—'}</span>`));
-    if (mcd.concerning) rows.push(row('🎯', 'Concerning', titleCase(mcd.concerning), true));
+    rows.push(row(icon('clock'), 'Valid until', `${formatLocalTime(mcd.expire)} · <span class="cd">${countdown(mcd.expire) ?? '—'}</span>`));
+    if (mcd.concerning) rows.push(row(icon('target'), 'Concerning', titleCase(mcd.concerning), true));
     if (Number.isFinite(mcd.watchProb)) {
-      rows.push(row('📊', 'Watch chance', `${mcd.watchProb}%`, mcd.watchProb >= 40));
+      rows.push(row(icon('chart'), 'Watch chance', `${mcd.watchProb}%`, mcd.watchProb >= 40));
     }
-    rows.push(row('🕐', 'Issued', formatLocalTime(mcd.issue)));
+    rows.push(row(icon('clock'), 'Issued', formatLocalTime(mcd.issue)));
 
     const summary = (mcd.summary ?? '').trim();
     root.innerHTML = `
       <div class="warn-card" style="--alert-color:${MCD_COLOR}">
         <div class="warn-card-tag">SPC Mesoscale Discussion</div>
         <div class="warn-card-head">
-          <div class="warn-card-event">🛰️ MCD #${mcd.num}</div>
+          <div class="warn-card-event">${icon('satellite')} MCD #${mcd.num}</div>
         </div>
         ${mcd.areas ? `<div class="warn-card-area">${escapeHtml(mcd.areas)}</div>` : ''}
         <div class="warn-card-rows">${rows.join('')}</div>

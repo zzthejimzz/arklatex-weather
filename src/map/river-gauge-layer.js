@@ -3,17 +3,22 @@
 // other quiet-day water stories (drought, ERO) — these are point readings,
 // not fills, so they sit fine over the ambient outlook without hiding it.
 import L from 'leaflet';
+import { icon } from '../ui/icons.js';
 
 // AHPS' own flood-category colors (their national map legend): yellow →
 // orange → red → purple as stage rises. Low water reuses the drought-monitor
 // tan since it's the same "dry" story, not a flood one. `chip` is a
 // readable-on-dark variant for chip text.
+// Icons escalate by shape too (STYLE_GUIDE.md §11): cracked drop → empty
+// drop → one band → two bands → solid + alert mark, so stage stays legible
+// even where the ring hue doesn't register (downscaling, color-blindness,
+// stream compression banding).
 export const RIVER_META = {
-  low_threshold: { order: 0, label: 'Low Water',       icon: '🏜️', color: '#c9a227', chip: '#e0c168' },
-  action:        { order: 1, label: 'Action Stage',    icon: '💧', color: '#ffe066', chip: '#fff0a3' },
-  minor:         { order: 2, label: 'Minor Flooding',  icon: '💧', color: '#ffa500', chip: '#ffc266' },
-  moderate:      { order: 3, label: 'Moderate Flooding', icon: '💧', color: '#ff3b3b', chip: '#ff8080' },
-  major:         { order: 4, label: 'Major Flooding',  icon: '💧', color: '#c724ff', chip: '#e29bff' },
+  low_threshold: { order: 0, label: 'Low Water',       icon: icon('river-low'),      color: '#c9a227', chip: '#e0c168' },
+  action:        { order: 1, label: 'Action Stage',    icon: icon('river-action'),   color: '#ffe066', chip: '#fff0a3' },
+  minor:         { order: 2, label: 'Minor Flooding',  icon: icon('river-minor'),    color: '#ffa500', chip: '#ffc266' },
+  moderate:      { order: 3, label: 'Moderate Flooding', icon: icon('river-moderate'), color: '#ff3b3b', chip: '#ff8080' },
+  major:         { order: 4, label: 'Major Flooding',  icon: icon('river-major'),    color: '#c724ff', chip: '#e29bff' },
 };
 
 export function createRiverGaugeLayer(map) {

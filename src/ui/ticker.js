@@ -9,6 +9,7 @@ import { fetchOutlook } from '../utils/spc-api.js';
 import { CATEGORICAL, normalizeLabel } from '../utils/map-colors.js';
 import { geometriesIntersect } from '../utils/geometry.js';
 import { sunTimes } from '../utils/sun.js';
+import { icon } from './icons.js';
 
 // Ticker's six anchor cities, pulled from the shared observations feed
 // (data/observations.js) — it fetches these stations plus the wider set the
@@ -22,7 +23,7 @@ const OBS_MS = 5 * 60 * 1000; // re-read the shared feed (it polls on its own)
 const OUTLOOK_MS = 15 * 60 * 1000;
 const SCROLL_PX_PER_S = 90;
 
-export function createTicker(el, geo, obsFeed) {
+export function createTicker(el, geo, obsFeed, { live = true } = {}) {
   el.innerHTML = `
     <div class="ticker-track">
       <div class="ticker-content"></div>
@@ -48,24 +49,24 @@ export function createTicker(el, geo, obsFeed) {
         `<b style="color:${s.color}">${a.props.event}</b> ${areaText} · until ${formatLocalTime(a.props.expires)}`,
       );
     }
-    if (outlookText) items.push(`<span class="tk-icon">⚡</span>${outlookText}`);
+    if (outlookText) items.push(`<span class="tk-icon">${icon('lightning')}</span>${outlookText}`);
 
     const obs = obsFeed?.get() ?? [];
     const obsParts = TICKER_CITIES
       .map(city => obs.find(o => o.city === city))
       .filter(o => o?.tempF != null)
       .map(o => `${o.city} <b>${o.tempF}°</b>${o.windMph ? ` <span class="tk-dim">${o.windMph} mph</span>` : ''}`);
-    if (obsParts.length) items.push(`<span class="tk-icon">🌡️</span>${obsParts.join(' &nbsp;·&nbsp; ')}`);
+    if (obsParts.length) items.push(`<span class="tk-icon">${icon('hot')}</span>${obsParts.join(' &nbsp;·&nbsp; ')}`);
 
     const { sunrise, sunset } = sunTimes(new Date(), SUN_LAT, SUN_LON);
     if (sunrise && sunset) {
       items.push(
-        `<span class="tk-icon">🌅</span>Sunrise <b>${formatLocalTime(sunrise)}</b>` +
-        ` &nbsp;·&nbsp; 🌇 Sunset <b>${formatLocalTime(sunset)}</b>`,
+        `<span class="tk-icon">${icon('sunrise')}</span>Sunrise <b>${formatLocalTime(sunrise)}</b>` +
+        ` &nbsp;·&nbsp; <span class="tk-icon">${icon('sunset')}</span> Sunset <b>${formatLocalTime(sunset)}</b>`,
       );
     }
 
-    items.push(`<span class="tk-icon">📺</span>${BRAND}`);
+    items.push(`<span class="tk-icon">${icon('broadcast')}</span>${BRAND}`);
     return items;
   }
 
@@ -111,9 +112,11 @@ export function createTicker(el, geo, obsFeed) {
   }
 
   rebuild();
-  refreshOutlook();
-  setInterval(rebuild, OBS_MS); // pick up fresh obs + roll the almanac at midnight
-  setInterval(refreshOutlook, OUTLOOK_MS);
+  if (live) {
+    refreshOutlook();
+    setInterval(rebuild, OBS_MS); // pick up fresh obs + roll the almanac at midnight
+    setInterval(refreshOutlook, OUTLOOK_MS);
+  }
 
   return { setAlerts };
 }

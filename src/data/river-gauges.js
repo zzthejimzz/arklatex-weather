@@ -69,7 +69,7 @@ export function createRiverGaugeSource(geo) {
     if (!gauges.length) return null;
     const g = gauges.reduce((a, b) =>
       RIVER_META[b.category].order > RIVER_META[a.category].order ? b : a);
-    return { ...RIVER_META[g.category], lid: g.lid, name: g.name, stage: g.stage, unit: g.unit };
+    return { ...RIVER_META[g.category], lid: g.lid, name: g.name, lat: g.lat, lon: g.lon, stage: g.stage, unit: g.unit };
   }
 
   return { start, get: () => gauges, worst };

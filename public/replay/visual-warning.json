@@ -1,0 +1,41 @@
+{
+  "name": "Deterministic warning screenshot fixture",
+  "speed": 1,
+  "alerts": [
+    {
+      "delaySec": 0.2,
+      "durationSec": 120,
+      "feature": {
+        "type": "Feature",
+        "geometry": {
+          "type": "Polygon",
+          "coordinates": [[
+            [-94.10, 32.45],
+            [-93.55, 32.55],
+            [-93.65, 32.90],
+            [-94.20, 32.80],
+            [-94.10, 32.45]
+          ]]
+        },
+        "properties": {
+          "id": "visual-tor-shreveport",
+          "event": "Tornado Warning",
+          "headline": "Tornado Warning for Caddo and Bossier Parishes LA",
+          "description": "A radar-indicated tornado is moving east toward the Shreveport metro.",
+          "severity": "Extreme",
+          "certainty": "Likely",
+          "urgency": "Immediate",
+          "areaDesc": "Caddo, LA; Bossier, LA",
+          "geocode": { "UGC": ["LAC017", "LAC015"] },
+          "parameters": {
+            "tornadoDetection": ["RADAR INDICATED"],
+            "tornadoDamageThreat": ["CONSIDERABLE"],
+            "maxHailSize": ["1.00"],
+            "maxWindGust": ["70 MPH"],
+            "eventMotionDescription": ["2026-07-19T18:00:00-00:00...storm...270DEG...40KT...32.55,-93.95"]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -13,31 +13,33 @@ const CITIES = [
 
 import { fetchWithTimeout } from '../utils/net.js';
 import { track } from '../utils/health.js';
+import { icon } from '../ui/icons.js';
 
 const REFRESH_MS = 30 * 60_000;
 const RETRY_MS = 5 * 60_000;
 
-// shortForecast → emoji; first match wins, so storms outrank rain and rain
-// outranks sky cover ("Showers then Sunny" reads as the weather that matters).
+// shortForecast → icon (ui/icons.js SVG mark); first match wins, so storms
+// outrank rain and rain outranks sky cover ("Showers then Sunny" reads as
+// the weather that matters).
 const ICONS = [
-  [/tornado/i, '🌪️'],
-  [/thunder/i, '⛈️'],
-  [/blizzard|snow|flurr/i, '🌨️'],
-  [/sleet|freezing|ice/i, '🧊'],
-  [/slight chance.*(rain|shower|drizzle)/i, '🌦️'],
-  [/rain|shower|drizzle/i, '🌧️'],
-  [/fog|haze|smoke/i, '🌫️'],
-  [/windy|breezy|blustery/i, '💨'],
-  [/mostly cloudy/i, '🌥️'],
-  [/partly|mostly sunny/i, '⛅'],
-  [/cloudy|overcast/i, '☁️'],
-  [/hot/i, '🥵'],
-  [/sunny|clear|fair/i, '☀️'],
+  [/tornado/i, 'tornado'],
+  [/thunder/i, 'storm'],
+  [/blizzard|snow|flurr/i, 'ice'],
+  [/sleet|freezing|ice/i, 'ice'],
+  [/slight chance.*(rain|shower|drizzle)/i, 'rain'],
+  [/rain|shower|drizzle/i, 'rain'],
+  [/fog|haze|smoke/i, 'fog'],
+  [/windy|breezy|blustery/i, 'wind'],
+  [/mostly cloudy/i, 'cloud'],
+  [/partly|mostly sunny/i, 'partly-cloudy'],
+  [/cloudy|overcast/i, 'cloud'],
+  [/hot/i, 'hot'],
+  [/sunny|clear|fair/i, 'sun'],
 ];
 
 export function iconFor(shortForecast = '') {
-  for (const [re, icon] of ICONS) if (re.test(shortForecast)) return icon;
-  return '🌡️';
+  for (const [re, name] of ICONS) if (re.test(shortForecast)) return icon(name);
+  return icon('hot'); // thermometer — neutral conditions fallback
 }
 
 const dowFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'short' });

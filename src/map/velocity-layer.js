@@ -11,6 +11,16 @@
 // RIDGE palette is dark and desaturated — at partial opacity over the dimmed
 // reflectivity it read as "faded reflectivity" on stream — so the pane also
 // boosts saturation/brightness/contrast and the tiles run fully opaque.
+//
+// Animation: unlike the n0q mosaic, IEM's RIDGE tile cache has no real
+// time-lag history for single-site products — every "-m05m".."-m90m" suffix
+// on a ridge:: URL comes back byte-identical (verified by hash), while only
+// the bare (current) URL is live. There's no server-side loop to draw from,
+// so this builds its own: a ring of frames, refreshed one at a time on a
+// timer, swept oldest → newest with the same crossfade/hold pacing as the
+// reflectivity loop. Freshly shown, all frames are the same current snapshot
+// (nothing to animate yet); real motion appears over the next few refresh
+// cycles as each slot gets overwritten with an actual later scan.
 import L from 'leaflet';
 
 // WSR-88Ds covering the ArkLaTex and its edges.
@@ -25,8 +35,14 @@ const SITES = [
 
 const url = (site, ts) =>
   `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::${site}-N0U-0/{z}/{x}/{y}.png?_ts=${ts}`;
-// New volume scan roughly every 4–6 min in precip mode; re-bust well inside that.
-const REFRESH_MS = 2 * 60 * 1000;
+// New volume scan roughly every 4–6 min in precip mode; snapshot well inside
+// that so a fresh scan is picked up promptly. Doubles as the loop's history
+// cadence: FRAME_COUNT * SNAPSHOT_MS is how far back the built-up loop reaches.
+const SNAPSHOT_MS = 2 * 60 * 1000;
+const FRAME_COUNT = 6; // ~12 min of history once fully built up
+const FRAME_MS = 650; // sweep pace, oldest → newest
+const HOLD_NEWEST_MS = 2200;
+const XFADE_MS = 240;
 const MAX_ZOOM = 14;
 const OPACITY = 1; // partial opacity let reflectivity greens bleed through and muddy the couplets
 
@@ -53,16 +69,14 @@ export function createVelocityLayer(map) {
   // No health beat here: velocity is an occasional overlay, silent for hours
   // on quiet days — registering it would just feed the watchdog false alarms.
   // If tiles fail, the shot still has the dimmed reflectivity underneath.
-  let layer = null;
+  let order = []; // ring buffer, oldest → newest, mutated in place by rotation
+  let current = null; // the frame currently faded in (or fading in)
   let site = null;
-  let refreshTimer = null;
+  let cycleTimer = null;
+  let lastSnapshotAt = 0;
 
-  function show(atLat, atLon) {
-    const s = nearestSite(atLat, atLon);
-    if (layer && site?.id === s.id) return s; // already up for this radar
-    hide();
-    site = s;
-    layer = L.tileLayer(url(s.id, Date.now()), {
+  function makeFrame(s, ts) {
+    return L.tileLayer(url(s.id, ts), {
       pane: 'velocity',
       opacity: 0,
       maxZoom: MAX_ZOOM,
@@ -70,29 +84,61 @@ export function createVelocityLayer(map) {
       keepBuffer: 2,
       crossOrigin: 'anonymous',
     }).addTo(map);
+  }
 
-    // Fade in over the (already fading) reflectivity — reads as a crossfade.
+  // Crossfade the visible frame — a hard cut reads as flicker on stream.
+  function fadeTo(next) {
+    const from = current;
+    current = next;
     const t0 = performance.now();
-    const lyr = layer;
     const step = (now) => {
-      if (lyr !== layer) return; // hidden/replaced mid-fade
-      const t = Math.min(1, (now - t0) / 350);
-      lyr.setOpacity(OPACITY * t);
-      if (t < 1) requestAnimationFrame(step);
+      const t = Math.min(1, (now - t0) / XFADE_MS);
+      next.setOpacity(OPACITY * t);
+      if (from) from.setOpacity(OPACITY * (1 - t));
+      if (t < 1 && current === next) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
+  }
 
-    refreshTimer = setInterval(() => {
-      layer?.setUrl(url(s.id, Date.now()));
-    }, REFRESH_MS);
+  function show(atLat, atLon) {
+    const s = nearestSite(atLat, atLon);
+    if (order.length && site?.id === s.id) return s; // already up for this radar, keep its built-up history
+    hide();
+    site = s;
+    const ts = Date.now();
+    order = Array.from({ length: FRAME_COUNT }, () => makeFrame(s, ts));
+    lastSnapshotAt = ts;
+
+    // Fade in over the (already fading) reflectivity — reads as a crossfade.
+    fadeTo(order[order.length - 1]);
+
+    let nextAt = Date.now() + HOLD_NEWEST_MS;
+    cycleTimer = setInterval(() => {
+      const i = order.indexOf(current);
+      const atNewest = i === order.length - 1;
+      // Only safe to repurpose the oldest frame while holding on newest —
+      // that's the one point in the sweep where the oldest slot is guaranteed
+      // off-screen, so overwriting its URL can't flash a mid-load blank tile.
+      if (atNewest && Date.now() - lastSnapshotAt >= SNAPSHOT_MS) {
+        const oldest = order.shift();
+        oldest.setUrl(url(s.id, Date.now()));
+        order.push(oldest);
+        lastSnapshotAt = Date.now();
+      }
+      if (Date.now() < nextAt) return;
+      const ni = (order.indexOf(current) + 1) % order.length;
+      fadeTo(order[ni]);
+      nextAt = Date.now() + (ni === order.length - 1 ? HOLD_NEWEST_MS : FRAME_MS);
+    }, 100);
     return s;
   }
 
   function hide() {
-    if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = null;
-    if (layer) map.removeLayer(layer);
-    layer = null;
+    if (cycleTimer) clearInterval(cycleTimer);
+    cycleTimer = null;
+    order.forEach((l) => map.removeLayer(l));
+    order = [];
+    current = null;
     site = null;
   }
 

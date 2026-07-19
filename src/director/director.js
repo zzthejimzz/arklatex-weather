@@ -19,9 +19,14 @@
 //                   locally, + the tropical outlook when the Atlantic has a
 //                   development area — with a per-disturbance camera visit
 //                   when there are several), then the forecast board, the
-//                   climate almanac, and frost/freeze + growing-season
-//                   normals (each one city per cycle); genuinely quiet
-//                   cycles close on the moon-phases page.
+//                   climate almanac, frost/freeze + growing-season normals,
+//                   UV index, air quality, and the pollen count — index dots
+//                   for every city plus one city's allergen detail card
+//                   (each one city per cycle);
+//                   genuinely quiet cycles close on the moon-phases page,
+//                   and — rarer still, since an aurora down here is real
+//                   news only during a G1+ storm — an occasional aurora /
+//                   Kp-index outlook page.
 import L from 'leaflet';
 import { boundsToLeaflet, pointInGeometry } from '../utils/geometry.js';
 import { GULF_BBOX } from '../map/tropical-layer.js';
@@ -29,6 +34,7 @@ import { isTourable, announces } from './scoring.js';
 import { track } from '../utils/health.js';
 import { formatInches, legendHtml } from '../map/rainfall-layer.js';
 import { formatDate } from '../utils/time.js';
+import { icon } from '../ui/icons.js';
 
 const TOUR_DWELL_MS = 25_000;
 const OVERVIEW_DWELL_MS = 30_000;
@@ -42,12 +48,18 @@ const MINOR_MAX_ZOOM = 9.8; // flood warnings / statements cover zones — stay 
 const MCD_MAX_ZOOM = 8.2;   // MCDs span multiple counties — keep the whole outline framed
 const REPORT_MAX_ZOOM = 11; // storm report pins: close enough to name the town
 const REPORT_BOX_M = 36_000; // fly frame around a report point (~36 km square)
+const RIVER_MAX_ZOOM = 10;   // wide enough to keep the river visible around the gauge
+const RIVER_BOX_M = 60_000;  // fly frame around the highlighted gauge (~60 km square)
 // Reports inside an active warning polygon join the warning rotation —
 // ground truth from inside the box beats another polygon lap. Same 3 h window
 // as the map pins; shorter dwell than idle stops so warnings keep the airtime.
 const REPORT_IN_WARN_WINDOW_MS = 3 * 60 * 60 * 1000;
 const REPORT_IN_WARN_DWELL_MS = 15_000;
 const REPORT_IN_WARN_MAX = 2;
+// A real geomagnetic storm (G1+) is worth a look any cycle, but "all quiet" —
+// the overwhelming majority of days — is even less of a story than the moon
+// phases; only surface it on one quiet cycle out of every AURORA_QUIET_EVERY.
+const AURORA_QUIET_EVERY = 5;
 
 // Storm-scale warnings get a two-act shot: reflectivity while the camera
 // settles, then a switch to single-site base velocity for the back half of the
@@ -64,7 +76,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, riverLayer, riverFeed, almanacFeed, frostFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
 
@@ -87,6 +99,10 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   let satIdx = 0;  // satellite channel rotation (vis when daylit → IR → WV)
   let almIdx = 0;  // almanac city rotation — next city each idle cycle
   let frostIdx = 0; // frost/growing-season city rotation — next city each idle cycle
+  let uvIdx = 0;    // UV index city rotation — next city each idle cycle
+  let aqiIdx = 0;   // air quality city rotation — next city each idle cycle
+  let pollenIdx = 0; // pollen city rotation — next city each idle cycle
+  let auroraQuietCycles = 0; // counts consecutive quiet, storm-free idle cycles
 
   function onAlerts({ alerts, added }) {
     active = alerts;
@@ -197,7 +213,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // right behind its categorical shot, and self-skips at runtime when no
     // probability area touches the region (the data is peeked when the stop
     // comes up, before anything paints, so a skip never shows on screen).
-    const hazardStops = [['torn', '🌪️ Tornado'], ['wind', '💨 Damaging Wind'], ['hail', '🧊 Large Hail']];
+    const hazardStops = [['torn', `${icon('tornado')} Tornado`], ['wind', `${icon('wind')} Damaging Wind`], ['hail', `${icon('hail')} Large Hail`]];
     plan.push({ type: 'outlook', day: 'day1', label: 'Day 1 Convective Outlook', dwell: busy ? 15_000 : 20_000 });
     for (const [hz, name] of hazardStops) plan.push({ type: 'outlook', day: 'day1', hazard: hz, label: `${name} Threat — Day 1`, dwell: busy ? 12_000 : 16_000 });
     plan.push({ type: 'outlook', day: 'day2', label: 'Day 2 Convective Outlook', dwell: busy ? 12_000 : 20_000 });
@@ -267,6 +283,24 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // same panel, one city per cycle, static climate-normal data so it always
     // has something to show once the one-time fetch resolves.
     if (frostFeed?.ready()) plan.push({ type: 'frost', dwell: busy ? 18_000 : 25_000 });
+    // UV index and air quality ride right behind frost — same panel, one
+    // city per cycle each, both refreshed feeds so always current when ready.
+    if (uvFeed?.ready()) plan.push({ type: 'uv', dwell: busy ? 16_000 : 22_000 });
+    if (aqiFeed?.ready()) plan.push({ type: 'aqi', dwell: busy ? 16_000 : 22_000 });
+    // Pollen rides right behind air quality (the same "what's in the air"
+    // story) — every city's index dot on the map, one city's card.
+    if (pollenFeed?.ready()) plan.push({ type: 'pollen', dwell: busy ? 16_000 : 22_000 });
+    // Aurora / Kp-index outlook rides right behind frost — same panel,
+    // national in scope (no locality gate). An actual G1+ storm is real news
+    // any cycle; but this far south "all quiet" is the case ~99% of the
+    // time, and showing that every cycle would just be repeated filler, so
+    // it's throttled to rarer than even the moon-phases closer.
+    const aurora = auroraFeed?.get();
+    if (aurora?.worstScale >= 1) {
+      plan.push({ type: 'aurora', dwell: busy ? 18_000 : 25_000 });
+    } else if (aurora && !busy && auroraQuietCycles++ % AURORA_QUIET_EVERY === 0) {
+      plan.push({ type: 'aurora', dwell: 25_000 });
+    }
     // Moon phases close the cycle — computed locally so always available,
     // but it's filler by design: busy idle cycles (watches, MCDs, echoes on
     // radar) skip it to keep the rotation on the weather.
@@ -302,6 +336,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
     if (step.type !== 'temps' && step.type !== 'feels') tempsLayer?.hide();
     if (step.type !== 'river') riverLayer?.hide();
+    if (step.type !== 'pollen') pollenLayer?.hide();
     switch (step.type) {
       case 'report': {
         outlookLayer.show('day1'); // reset from any outlook step
@@ -380,6 +415,69 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }
+      case 'uv': {
+        // Rides right after the frost page: one city's EPA daily UV Index
+        // forecast, rotating through the climate cities cycle by cycle.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        const cities = uvFeed?.get() ?? [];
+        if (!cities.length) return advance();
+        const c = cities[uvIdx++ % cities.length];
+        if (!forecastPanel?.showUv(c)) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'aqi': {
+        // Rides right after the UV page: one city's current US AQI, rotating
+        // through the climate cities cycle by cycle.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        const cities = aqiFeed?.get() ?? [];
+        if (!cities.length) return advance();
+        const c = cities[aqiIdx++ % cities.length];
+        if (!forecastPanel?.showAqi(c)) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'pollen': {
+        // Rides right after the AQI page: one city's pollen card in the
+        // panel while the map keeps every climate city's index dot up —
+        // regional intensity and local allergen detail in one shot.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        const cities = pollenFeed?.get() ?? [];
+        if (!cities.length) return advance();
+        const c = cities[pollenIdx++ % cities.length];
+        if (!forecastPanel?.showPollen(c)) return advance();
+        pollenLayer?.show(cities);
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'aurora': {
+        // Rides right after the pollen page: current Kp/G-scale + the 3-day
+        // outlook. National product, so no city rotation — one page.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        if (!forecastPanel?.showAurora(auroraFeed?.get())) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
       case 'moon': {
         // Quiet-cycle closer on the same panel: tonight's moon + the next
         // four principal phases, computed locally (no feed to wait on).
@@ -400,7 +498,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         forecastPanel?.hide();
         outlookLayer.show('day1');
         tempsLayer?.show(obsFeed?.get() ?? []);
-        showChip('🌡️ Current Temperatures<span class="sub">NWS observations</span>');
+        showChip(`${icon('hot')} Current Temperatures<span class="sub">NWS observations</span>`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -418,8 +516,8 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const ext = feels.reduce((a, b) =>
           (step.hot ? b.feelsF > a.feelsF : b.feelsF < a.feelsF) ? b : a);
         showChip(step.hot
-          ? `🥵 Feels Like — Heat Index<span class="sub">Peak: <b>${ext.feelsF}°</b> at ${ext.city} · temperature + humidity</span>`
-          : `🥶 Feels Like — Wind Chill<span class="sub">Coldest: <b>${ext.feelsF}°</b> at ${ext.city} · temperature + wind</span>`);
+          ? `${icon('hot')} Feels Like — Heat Index<span class="sub">Peak: <b>${ext.feelsF}°</b> at ${ext.city} · temperature + humidity</span>`
+          : `${icon('freeze')} Feels Like — Wind Chill<span class="sub">Coldest: <b>${ext.feelsF}°</b> at ${ext.city} · temperature + wind</span>`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -433,7 +531,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!ch) return advance();
         outlookLayer.hide(); // full-frame imagery — risk fills bleeding through read as color cast
         outlookHidden = true;
-        showChip(`🛰️ ${ch.label}<span class="sub">${ch.sub} · GOES-East</span>`);
+        showChip(`${icon('satellite')} ${ch.label}<span class="sub">${ch.sub} · GOES-East</span>`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -448,7 +546,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         // Radar hides only once the totals tiles are painted — both are precip
         // palettes, but a brief overlap beats holes in the map on air.
         rainfallLayer.show(p.key, () => radar?.setHidden(true));
-        showChip(`🌧️ ${p.label} Totals<span class="sub">Heaviest: ${formatInches(p.maxMm)} ${p.place} · MRMS radar estimate</span>${legendHtml()}`);
+        showChip(`${icon('rain')} ${p.label} Totals<span class="sub">Heaviest: ${formatInches(p.maxMm)} ${p.place} · MRMS radar estimate</span>${legendHtml()}`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -468,7 +566,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const stageTxt = Number.isFinite(worst.stage) && worst.stage > -900
           ? ` (${worst.stage.toFixed(1)} ${worst.unit})` : '';
         showChip(`${worst.icon} River Levels<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label}</b> — ${worst.name}${stageTxt}</span><span class="sub">${legend} &nbsp;·&nbsp; NWS river forecast centers</span>`);
-        fly(regionBounds);
+        fly(L.latLng(worst.lat, worst.lon).toBounds(RIVER_BOX_M), RIVER_MAX_ZOOM);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }
@@ -486,7 +584,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
           .join(' ');
         const asOf = formatDate(droughtFeed?.releaseDate?.());
         const asOfTxt = asOf ? ` &nbsp;·&nbsp; as of ${asOf}` : '';
-        showChip(`🏜️ U.S. Drought Monitor<span class="sub">Worst locally: <b style="color:${info.worst.chip}">${info.worst.label}</b>${asOfTxt}</span><span class="sub">${legend} &nbsp;·&nbsp; burn bans common in D2+ counties</span>`);
+        showChip(`${icon('river-low')} U.S. Drought Monitor<span class="sub">Worst locally: <b style="color:${info.worst.chip}">${info.worst.label}</b>${asOfTxt}</span><span class="sub">${legend} &nbsp;·&nbsp; burn bans common in D2+ counties</span>`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -505,7 +603,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const legend = info.legend
           .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
           .join(' ');
-        showChip(`🌊 Day ${dayNum} Excessive Rainfall Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Risk (${worst.prob})</b></span><span class="sub">${legend} &nbsp;·&nbsp; rain exceeding flash flood guidance — WPC</span>`);
+        showChip(`${icon('flash-flood')} Day ${dayNum} Excessive Rainfall Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Risk (${worst.prob})</b></span><span class="sub">${legend} &nbsp;·&nbsp; rain exceeding flash flood guidance — WPC</span>`);
         fly(wideBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -524,7 +622,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const legend = info.legend
           .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
           .join(' ');
-        showChip(`🔥 Day ${dayNum} Fire Weather Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Fire Risk</b></span><span class="sub">${legend} &nbsp;·&nbsp; gusty wind + low humidity — SPC</span>`);
+        showChip(`${icon('fire')} Day ${dayNum} Fire Weather Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Fire Risk</b></span><span class="sub">${legend} &nbsp;·&nbsp; gusty wind + low humidity — SPC</span>`);
         fly(wideBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -546,7 +644,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const head = n > 1
           ? `${n} areas to watch — highest 7-day formation chance:`
           : 'Highest 7-day formation chance:';
-        showChip(`🌀 Tropical Weather Outlook<span class="sub">${head} <b style="color:${info.top.chip}">${info.top.prob}% (${info.top.label})</b></span><span class="sub">${legend} &nbsp;·&nbsp; ✕ current location — NHC</span>`);
+        showChip(`${icon('hurricane')} Tropical Weather Outlook<span class="sub">${head} <b style="color:${info.top.chip}">${info.top.prob}% (${info.top.label})</b></span><span class="sub">${legend} &nbsp;·&nbsp; ✕ current location — NHC</span>`);
         // Gulf always in frame, stretched to reach the region and any area
         // sitting outside it (a Caribbean or open-Atlantic wave stays visible).
         const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
@@ -573,7 +671,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info?.focus) return advance();
         outlookLayer.hide(); // convective risk fills run the same yellow→red ramp
         outlookHidden = true;
-        showChip(`🌀 Disturbance ${step.rank + 1} of ${data.areas.length}<span class="sub">7-day formation chance: <b style="color:${info.focus.chip}">${info.focus.prob7}% (${info.focus.label})</b> &nbsp;·&nbsp; next 48 hours: ${info.focus.prob2}%</span><span class="sub">✕ current location &nbsp;·&nbsp; potential development area — NHC</span>`);
+        showChip(`${icon('hurricane')} Disturbance ${step.rank + 1} of ${data.areas.length}<span class="sub">7-day formation chance: <b style="color:${info.focus.chip}">${info.focus.prob7}% (${info.focus.label})</b> &nbsp;·&nbsp; next 48 hours: ${info.focus.prob2}%</span><span class="sub">✕ current location &nbsp;·&nbsp; potential development area — NHC</span>`);
         fly(L.latLngBounds(boundsToLeaflet(info.focus.bbox)).pad(0.35), 7);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -584,7 +682,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         alertsLayer.highlight(null);
         forecastPanel?.hide();
         outlookLayer.show('day1');
-        showChip(`📡 Tracking precipitation<span class="sub">${step.poi.placeLabel}</span>`);
+        showChip(`${icon('radar')} Tracking precipitation<span class="sub">${step.poi.placeLabel}</span>`);
         fly(L.latLngBounds(boundsToLeaflet(step.poi.bounds)).pad(0.15), POI_MAX_ZOOM);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -648,6 +746,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     mcdLayer?.highlight(null);
     tempsLayer?.hide();
     riverLayer?.hide();
+    pollenLayer?.hide();
     forecastPanel?.hide();
     hideChip();
     reportsLayer?.highlight(live.id);
@@ -668,6 +767,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     reportsLayer?.highlight(null);
     tempsLayer?.hide();
     riverLayer?.hide();
+    pollenLayer?.hide();
     forecastPanel?.hide();
     hideChip();
     mcdLayer?.highlight(live.key);
@@ -685,6 +785,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     mcdLayer?.highlight(null);
     tempsLayer?.hide();
     riverLayer?.hide();
+    pollenLayer?.hide();
     forecastPanel?.hide(); // restores full-width map before the fly is computed
     const bounds = L.latLngBounds(boundsToLeaflet(alert.bounds)).pad(0.3);
     fly(bounds, maxZoom);
@@ -705,7 +806,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const site = velocityLayer.show((s + n) / 2, (w + e) / 2);
         if (!site) return;
         radar?.setDim(true);
-        showChip(`🌀 Storm Velocity — ${site.id} ${site.name}<span class="sub">green: toward radar · red: away · tight couplet = rotation</span>`);
+        showChip(`${icon('hurricane')} Storm Velocity — ${site.id} ${site.name}<span class="sub">green: toward radar · red: away · tight couplet = rotation</span>`);
       }, FLY_MS + dwell * VELOCITY_AT);
     }
   }
@@ -720,6 +821,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     mcdLayer?.highlight(null);
     tempsLayer?.hide();
     riverLayer?.hide();
+    pollenLayer?.hide();
     forecastPanel?.hide();
     fly(regionBounds);
     dwellUntil = Date.now() + FLY_MS + dwell;

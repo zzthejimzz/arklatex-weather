@@ -3,6 +3,8 @@
 // low-precision series, ~0.3° ≈ ±40 min on a phase time — a broadcast date
 // card never notices), with the phase read from their elongation:
 // 0° new → 90° first quarter → 180° full → 270° last quarter.
+import { icon } from '../ui/icons.js';
+
 const rad = Math.PI / 180;
 const DAY_MS = 86_400_000;
 const J2000 = Date.UTC(2000, 0, 1, 12); // epoch: 2000-01-01 12:00 UTC
@@ -37,14 +39,14 @@ function elongation(date) {
 }
 
 export const MOON_PHASES = [
-  { name: 'New Moon', emoji: '🌑' },
-  { name: 'Waxing Crescent', emoji: '🌒' },
-  { name: 'First Quarter', emoji: '🌓' },
-  { name: 'Waxing Gibbous', emoji: '🌔' },
-  { name: 'Full Moon', emoji: '🌕' },
-  { name: 'Waning Gibbous', emoji: '🌖' },
-  { name: 'Last Quarter', emoji: '🌗' },
-  { name: 'Waning Crescent', emoji: '🌘' },
+  { name: 'New Moon', icon: icon('moon-new') },
+  { name: 'Waxing Crescent', icon: icon('moon-waxing-crescent') },
+  { name: 'First Quarter', icon: icon('moon-first-quarter') },
+  { name: 'Waxing Gibbous', icon: icon('moon-waxing-gibbous') },
+  { name: 'Full Moon', icon: icon('moon-full') },
+  { name: 'Waning Gibbous', icon: icon('moon-waning-gibbous') },
+  { name: 'Last Quarter', icon: icon('moon-last-quarter') },
+  { name: 'Waning Crescent', icon: icon('moon-waning-crescent') },
 ];
 
 // Current phase: the 8-way wheel (each principal phase owns ±22.5° of
