@@ -78,7 +78,8 @@ function dwellFor(alert, base) {
 
 export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
   const chipEl = document.getElementById('outlook-chip');
-  const wideBounds = regionBounds.pad(1.6); // outlook shots need the multi-state pattern
+  const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
+  const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
 
   // Every camera move goes through here so the radar loop can warm the
   // destination's tiles while the shot is still in the air.
@@ -707,7 +708,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
             if (dwellUntil !== myShot) return;
             if (!peeked?.worst) { dwellUntil = 0; return; }
           }
-          fly(wideBounds);
+          fly(outlookBounds);
           const info = await outlookLayer.show(step.day, { emphasize: true, hazard });
           if (dwellUntil !== myShot) return;
           if (step.hazard) {
