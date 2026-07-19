@@ -38,11 +38,20 @@ sleep 2
 # an IPC/sync hop off every frame — noticeably smoother map flyTo/zoom under
 # software rendering, at the cost of a GPU crash taking down the whole thing
 # (already systemd-restarted either way, so no real downside here).
+# --disable-gpu-compositing: even plain CSS transforms (the ticker) were
+# choppy, meaning the whole page's compositor — not just the WebGL map —
+# was routing through SwiftShader. This forces ordinary 2D layers onto the
+# CPU/Skia compositor instead; the map canvas still gets SwiftShader for
+# WebGL specifically.
+# --disable-gpu-vsync: Xvfb has no real display refresh to pace against —
+# don't throttle frame production to a vsync signal that doesn't exist.
 DISPLAY=$DISPLAY_NUM chromium \
   --kiosk "$PAGE_URL" \
   --window-size=1920,1080 --window-position=0,0 \
   --enable-unsafe-swiftshader \
   --in-process-gpu \
+  --disable-gpu-compositing \
+  --disable-gpu-vsync \
   --autoplay-policy=no-user-gesture-required \
   --disable-background-timer-throttling \
   --disable-renderer-backgrounding \
