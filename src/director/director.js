@@ -16,10 +16,11 @@
 //                   stage+ or unusually low) + drought monitor (+ WPC
 //                   excessive rainfall when a flash-flood risk area sits
 //                   locally, + fire weather when SPC has an Elevated+ area
-//                   locally, + the tropical outlook when the Atlantic has a
-//                   development area — with a per-disturbance camera visit
-//                   when there are several), then the forecast board, the
-//                   climate almanac, frost/freeze + growing-season normals,
+//                   locally, + any NHC-numbered system's forecast track and
+//                   cone of uncertainty, + the tropical outlook when the
+//                   Atlantic has a development area — with a per-disturbance
+//                   camera visit when there are several), then the forecast
+//                   board, the climate almanac, frost/freeze + growing-season normals,
 //                   UV index, air quality, and the pollen count — index dots
 //                   for every city plus one city's allergen detail card
 //                   (each one city per cycle);
@@ -28,7 +29,7 @@
 //                   news only during a G1+ storm — an occasional aurora /
 //                   Kp-index outlook page.
 import L from 'leaflet';
-import { boundsToLeaflet, pointInGeometry } from '../utils/geometry.js';
+import { boundsToLeaflet, pointInGeometry, geometryBounds, bboxesOverlap } from '../utils/geometry.js';
 import { GULF_BBOX } from '../map/tropical-layer.js';
 import { isTourable, announces } from './scoring.js';
 import { track } from '../utils/health.js';
@@ -61,6 +62,14 @@ const REPORT_IN_WARN_MAX = 2;
 // phases; only surface it on one quiet cycle out of every AURORA_QUIET_EVERY.
 const AURORA_QUIET_EVERY = 5;
 
+// A Gulf-adjacent disturbance at High risk (NHC's own tier starts at 70%,
+// this station picks up the pace at 80%) is appointment viewing — the idle
+// rotation revisits it far more than once a lap, same idea as a destructive
+// warning getting interleaved between every other stop.
+const GULF_WATCH_PROB = 80;
+const GULF_WATCH_INTERVAL = 5; // repeat visit inserted after every N other stops
+const GULF_WATCH_DWELL_MS = 14_000;
+
 // Storm-scale warnings get a two-act shot: reflectivity while the camera
 // settles, then a switch to single-site base velocity for the back half of the
 // dwell — the "is it rotating?" look. Reflectivity stays dimmed underneath.
@@ -76,7 +85,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -262,6 +271,15 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     for (const day of firewxFeed?.days() ?? []) {
       plan.push({ type: 'firewx', day, dwell: busy ? 14_000 : 20_000 });
     }
+    // A numbered/named system the NHC is actively advising on outranks the
+    // generic 7-day outlook — same "is it coming our way" story, but with an
+    // actual forecast track and cone instead of a formation-chance polygon.
+    // One shot per active system (the service allows up to five per basin;
+    // in practice it's almost always zero or one).
+    const stormN = tropicalStormFeed?.count() ?? 0;
+    for (let i = 0; i < stormN; i++) {
+      plan.push({ type: 'tropical-storm', idx: i, dwell: busy ? 16_000 : 24_000 });
+    }
     // Tropical outlook whenever the Atlantic has a 7-day development area —
     // existence is the gate (no local-overlap test: remnants travel). With
     // several disturbances the basin-wide shot can only headline one, so the
@@ -306,6 +324,29 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // but it's filler by design: busy idle cycles (watches, MCDs, echoes on
     // radar) skip it to keep the rotation on the weather.
     if (!busy) plan.push({ type: 'moon', dwell: 22_000 });
+
+    // A serious Gulf threat gets woven through the whole lap instead of
+    // appearing once: find the top outlook area, and if it's High risk
+    // (≥80%) and actually sits over the Gulf, splice a repeat visit in every
+    // few stops. Prefer the matching tracked storm's own track + cone over
+    // the generic outlook once the system has one — same "coming our way"
+    // bbox check as the area's own camera framing.
+    const topArea = (tropicalFeed?.get()?.areas ?? []).at(-1);
+    const topProb = topArea ? parseInt(topArea.properties?.prob7day) || 0 : 0;
+    const topBox = topArea ? geometryBounds(topArea.geometry) : null;
+    if (topProb >= GULF_WATCH_PROB && bboxesOverlap(topBox, GULF_BBOX)) {
+      const storms = tropicalStormFeed?.get() ?? [];
+      const stormIdx = storms.findIndex(s => {
+        const fix = s.points[0]?.geometry?.coordinates;
+        return fix && bboxesOverlap([fix[0], fix[1], fix[0], fix[1]], GULF_BBOX);
+      });
+      const repeat = stormIdx >= 0
+        ? { type: 'tropical-storm', idx: stormIdx, dwell: GULF_WATCH_DWELL_MS }
+        : { type: 'tropical', dwell: GULF_WATCH_DWELL_MS };
+      for (let i = GULF_WATCH_INTERVAL; i < plan.length; i += GULF_WATCH_INTERVAL + 1) {
+        plan.splice(i, 0, repeat);
+      }
+    }
     return plan;
   }
 
@@ -325,6 +366,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     eroLayer?.hide();
     firewxLayer?.hide();
     tropicalLayer?.hide();
+    tropicalStormLayer?.hide();
     if (outlookHidden) {
       outlookHidden = false;
       outlookLayer.show('day1');
@@ -625,6 +667,27 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
           .join(' ');
         showChip(`${icon('fire')} Day ${dayNum} Fire Weather Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Fire Risk</b></span><span class="sub">${legend} &nbsp;·&nbsp; gusty wind + low humidity — SPC</span>`);
         fly(wideBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'tropical-storm': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        const storm = (tropicalStormFeed?.get() ?? [])[step.idx];
+        const info = storm && tropicalStormLayer?.show(storm);
+        if (!info) return advance(); // advisory dropped since the plan was built
+        outlookLayer.hide(); // convective risk fills run a similar color ramp
+        outlookHidden = true;
+        const wind = `${info.windMph} mph${info.gustMph > info.windMph ? ` (gusts ${info.gustMph})` : ''}`;
+        const move = info.moveDir
+          ? `Moving ${info.moveDir} at ${info.moveMph} mph`
+          : 'Nearly stationary';
+        showChip(`${icon('hurricane')} ${info.title}<span class="sub">Max sustained: <b style="color:${info.chip}">${wind}</b> &nbsp;·&nbsp; ${move}</span><span class="sub">Advisory ${info.advisNum} · ${info.advDate} &nbsp;·&nbsp; forecast track &amp; cone of uncertainty — NHC</span>`);
+        const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
+        if (info.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
+        fly(b.pad(0.05));
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }

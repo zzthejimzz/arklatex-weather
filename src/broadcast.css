@@ -1001,3 +1001,20 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   text-shadow: 0 0 6px rgba(0, 0, 0, 0.9), 0 2px 3px rgba(0, 0, 0, 0.7);
   pointer-events: none;
 }
+
+/* Tracked-storm forecast points: a colored dot (fill set inline per tier)
+   plus a time/category label offset to the side; the current fix gets a
+   bigger dot via the .now modifier. */
+.storm-pt { position: relative; pointer-events: none; }
+.storm-pt .dot {
+  position: absolute; top: 50%; left: 50%; width: 11px; height: 11px;
+  margin: -6px 0 0 -6px; border-radius: 50%; border: 2px solid #fff;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.85);
+}
+.storm-pt.now .dot { width: 17px; height: 17px; margin: -9px 0 0 -9px; }
+.storm-pt .lbl {
+  position: absolute; top: 50%; left: 15px; transform: translateY(-50%);
+  white-space: nowrap; font-size: 13px; font-weight: 700; color: #fff;
+  text-shadow: 0 0 5px rgba(0, 0, 0, 0.9), 0 2px 3px rgba(0, 0, 0, 0.75);
+}
+.storm-pt.now .lbl { left: 18px; font-size: 16px; }

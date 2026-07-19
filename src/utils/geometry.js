@@ -31,12 +31,17 @@ export function pointInGeometry(pt, geom) {
   return false;
 }
 
-// Iterate every outer-ring vertex of a Polygon/MultiPolygon.
+// Iterate every outer-ring/line vertex of a Point/Polygon/LineString (and
+// their Multi- variants) — enough to bound a storm track alongside the
+// warning polygons this was originally written for.
 export function* outerVertices(geom) {
   if (!geom) return;
   if (geom.type === 'Point') yield geom.coordinates;
+  else if (geom.type === 'LineString') yield* geom.coordinates;
   else if (geom.type === 'Polygon') yield* geom.coordinates[0] ?? [];
-  else if (geom.type === 'MultiPolygon') {
+  else if (geom.type === 'MultiLineString') {
+    for (const line of geom.coordinates) yield* line;
+  } else if (geom.type === 'MultiPolygon') {
     for (const poly of geom.coordinates) yield* poly[0] ?? [];
   } else if (geom.type === 'GeometryCollection') {
     for (const g of geom.geometries ?? []) yield* outerVertices(g);

@@ -19,6 +19,8 @@ import { createFireWxLayer } from './map/firewx-layer.js';
 import { createFireWxSource } from './data/firewx.js';
 import { createTropicalLayer, GULF_BBOX } from './map/tropical-layer.js';
 import { createTropicalSource } from './data/tropical.js';
+import { createTropicalStormLayer } from './map/tropical-storm-layer.js';
+import { createTropicalStormSource } from './data/tropical-storm.js';
 import { createRiverGaugeLayer } from './map/river-gauge-layer.js';
 import { createRiverGaugeSource } from './data/river-gauges.js';
 import { createAlmanacSource } from './data/almanac.js';
@@ -131,6 +133,12 @@ async function boot() {
   if (!visualTest) tropicalSource.start();
   const tropicalLayer = createTropicalLayer(map);
 
+  // NHC active-storm tracking (forecast track + cone) — only airs once a
+  // disturbance actually gets a number, the follow-up to the outlook above.
+  const tropicalStormSource = createTropicalStormSource();
+  if (!visualTest) tropicalStormSource.start();
+  const tropicalStormLayer = createTropicalStormLayer(map);
+
   // NWS river gauge flood status — only airs when a gauge locally is at
   // action stage or above, or unusually low.
   const riverSource = createRiverGaugeSource(geo);
@@ -218,6 +226,7 @@ async function boot() {
     velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
     eroLayer, eroFeed: eroSource,
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
+    tropicalStormLayer, tropicalStormFeed: tropicalStormSource,
     riverLayer, riverFeed: riverSource,
     almanacFeed: almanacSource, frostFeed: frostSource,
     uvFeed: uvSource, aqiFeed: aqiSource,
@@ -407,6 +416,52 @@ async function boot() {
         map.fitBounds(L.latLngBounds(boundsToLeaflet(info.focus.bbox)).pad(0.35), { maxZoom: 7 });
         return;
       }
+      const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
+      if (info?.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
+      map.fitBounds(b.pad(0.05));
+    }, 500);
+  } else if (params.has('tropstorm')) {
+    // Dev-only: park on the NHC active-storm tracking shot. ?tropstorm uses
+    // live data (blank until the NHC is advising on an Atlantic system);
+    // ?tropstorm=mock paints a fabricated Gulf-bound depression so the track/
+    // cone visuals stay checkable off-season.
+    const mockPoint = (tau, lon, lat, stormtype, maxwind, datelbl) => ({
+      type: 'Feature',
+      properties: {
+        stormname: 'Tropical Storm Example', stormtype, tcdvlp: 'Tropical Storm',
+        maxwind, gust: maxwind + 10, mslp: 1000, ssnum: 0, tau, datelbl,
+        tcdir: 320, tcspd: 8, advdate: '400 PM CDT Sat Jul 18 2026', advisnum: '3',
+      },
+      geometry: { type: 'Point', coordinates: [lon, lat] },
+    });
+    const mock = {
+      points: [
+        mockPoint(0, -88.5, 21.0, 'TS', 45, '4:00 PM Sat'),
+        mockPoint(24, -89.5, 23.5, 'TS', 55, '4:00 PM Sun'),
+        mockPoint(48, -90.2, 26.5, 'HU', 70, '4:00 PM Mon'),
+        mockPoint(72, -90.8, 29.3, 'HU', 85, '4:00 PM Tue'),
+      ],
+      track: {
+        type: 'Feature', properties: { stormname: 'Example' },
+        geometry: { type: 'LineString', coordinates: [[-88.5, 21.0], [-89.5, 23.5], [-90.2, 26.5], [-90.8, 29.3]] },
+      },
+      cone: {
+        type: 'Feature', properties: { stormname: 'Example' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[[-90, 20.3], [-87.5, 21], [-88, 23.5], [-88.7, 26.5], [-89.2, 29.5],
+            [-92.4, 29.1], [-91.8, 26.5], [-91, 23.5], [-90, 20.3]]],
+        },
+      },
+    };
+    const useMock = params.get('tropstorm') === 'mock';
+    map.fitBounds(regionBounds); // hold the region until data shows up
+    const t = setInterval(() => {
+      const storms = useMock ? [mock] : tropicalStormSource.get();
+      if (!storms.length) return;
+      clearInterval(t);
+      outlookLayer.hide();
+      const info = tropicalStormLayer.show(storms[0]);
       const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
       if (info?.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
       map.fitBounds(b.pad(0.05));
