@@ -17,7 +17,7 @@
 set -euo pipefail
 
 DISPLAY_NUM=:99
-SIZE=1920x1080
+SIZE=1280x720
 FPS=30
 PAGE_URL="http://127.0.0.1:8080/"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY:?set in /etc/arklatex.env}"
@@ -47,7 +47,7 @@ sleep 2
 # don't throttle frame production to a vsync signal that doesn't exist.
 DISPLAY=$DISPLAY_NUM chromium \
   --kiosk "$PAGE_URL" \
-  --window-size=1920,1080 --window-position=0,0 \
+  --window-size=1280,720 --window-position=0,0 \
   --enable-unsafe-swiftshader \
   --in-process-gpu \
   --disable-gpu-compositing \
@@ -69,7 +69,7 @@ ffmpeg -loglevel warning \
   -stream_loop -1 -i "$MUSIC_FILE" \
   -map 0:v -map 1:a \
   -af "volume=${MUSIC_VOLUME}" \
-  -c:v libx264 -preset veryfast -pix_fmt yuv420p \
+  -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
   -b:v 6000k -maxrate 6000k -bufsize 12M -g $((FPS * 2)) \
   -c:a aac -b:a 128k -ar 44100 -ac 2 \
   -f flv "$RTMP" &
