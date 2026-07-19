@@ -191,11 +191,23 @@ export async function addVectorBasemap(map) {
     attribution: '', // Leaflet attribution set once in basemap.js
   }).addTo(map);
 
+  const labelsStyle = buildLabelsStyle(style);
   const labels = L.maplibreGL({
     pane: 'labels',
-    style: buildLabelsStyle(style),
+    style: labelsStyle,
     attribution: '',
   }).addTo(map);
+
+  // Symbol placement/collision is the single most expensive part of a GL
+  // repaint, and it recomputes continuously while the camera moves. Under
+  // software rendering (no GPU on the VPS) that's what makes flyTo/zoom
+  // visibly choppy. Labels are illegible mid-flight anyway, so drop them
+  // for the animation and let them redraw once the camera settles.
+  const labelIds = labelsStyle.layers.map(l => l.id);
+  const glLabels = labels.getMaplibreMap();
+  const setLabelVisibility = v => { for (const id of labelIds) glLabels.setLayoutProperty(id, 'visibility', v); };
+  map.on('movestart zoomstart', () => setLabelVisibility('none'));
+  map.on('moveend zoomend', () => setLabelVisibility('visible'));
 
   return { base, labels };
 }
