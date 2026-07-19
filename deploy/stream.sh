@@ -34,10 +34,15 @@ sleep 2
 # --enable-unsafe-swiftshader: the vector basemap needs WebGL, and there is
 # no GPU on the VPS — SwiftShader renders it in software (Chromium ≥128
 # requires the explicit opt-in flag).
+# --in-process-gpu: folds the GPU process into the browser process, cutting
+# an IPC/sync hop off every frame — noticeably smoother map flyTo/zoom under
+# software rendering, at the cost of a GPU crash taking down the whole thing
+# (already systemd-restarted either way, so no real downside here).
 DISPLAY=$DISPLAY_NUM chromium \
   --kiosk "$PAGE_URL" \
   --window-size=1920,1080 --window-position=0,0 \
   --enable-unsafe-swiftshader \
+  --in-process-gpu \
   --autoplay-policy=no-user-gesture-required \
   --disable-background-timer-throttling \
   --disable-renderer-backgrounding \
