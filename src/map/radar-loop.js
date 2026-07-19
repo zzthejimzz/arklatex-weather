@@ -172,13 +172,13 @@ const SmoothRadarLayer = L.GridLayer.extend({
       ctx.drawImage(img, pad + dx * 256, pad + dy * 256);
     }
 
-    try {
-      renderRadarTile(padded, pad, tile, radius);
-    } catch {
-      // canvas tainted (no CORS) — fall back to the raw center tile
-      const raw = loaded.find((t) => t.dx === 0 && t.dy === 0).img;
-      tile.getContext('2d').drawImage(raw, 0, 0, 512, 512);
-    }
+    // Canvas taint here means this response didn't carry CORS headers —
+    // in practice that's IEM's backend handing back an error/placeholder
+    // graphic instead of real radar data (occasionally seen as a bright
+    // orange tile with error text), not a normal cached tile. Drawing that
+    // raw would put the error graphic on air, so treat it like any other
+    // fetch failure: let the caller retry, empty tile beats a broken one.
+    renderRadarTile(padded, pad, tile, radius);
     return loaded.length === slots.length; // false = a neighbor missing (seam risk)
   },
 });
