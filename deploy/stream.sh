@@ -17,7 +17,7 @@
 set -euo pipefail
 
 DISPLAY_NUM=:99
-SIZE=1280x720
+SIZE=1920x1080
 FPS=30
 PAGE_URL="http://127.0.0.1:8080/"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY:?set in /etc/arklatex.env}"
@@ -47,7 +47,7 @@ sleep 2
 # don't throttle frame production to a vsync signal that doesn't exist.
 DISPLAY=$DISPLAY_NUM chromium \
   --kiosk "$PAGE_URL" \
-  --window-size=1280,720 --window-position=0,0 \
+  --window-size=1920,1080 --window-position=0,0 \
   --enable-unsafe-swiftshader \
   --in-process-gpu \
   --disable-gpu-compositing \
