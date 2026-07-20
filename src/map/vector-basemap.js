@@ -60,6 +60,12 @@ const BASE_DROP =
 // ---- label styling ----------------------------------------------------------
 const TEXT_SCALE = 1.25; // broadcast legibility at 1080p
 
+// When labels/roads are restored after a camera move (see addVectorBasemap),
+// ramp their opacity instead of hard-popping — the "populating" beat reads as a
+// deliberate reveal rather than a stutter. Baked as a paint-opacity transition
+// on every fadeable layer so the runtime only has to toggle the opacity value.
+const FADE_MS = 220;
+
 // Per-layer text colors; everything else gets plain white.
 const TEXT_COLOR = {
   waterway_line_label: '#a8c3d4',
@@ -127,6 +133,9 @@ function buildBaseStyle(style) {
       else if (layer.type === 'fill') layer.paint['fill-color'] = color;
       else if (layer.type === 'line') layer.paint['line-color'] = color;
     }
+    // Arm the settle fade-in (roads are lines; landuse/park are fills).
+    if (layer.type === 'line') layer.paint['line-opacity-transition'] = { duration: FADE_MS, delay: 0 };
+    else if (layer.type === 'fill') layer.paint['fill-opacity-transition'] = { duration: FADE_MS, delay: 0 };
     // boundary_3 ships as admin_level 3–6, which includes state lines we
     // already draw in white above the radar. Restrict to 5–6: county lines.
     if (layer.id === 'boundary_3') {
@@ -159,6 +168,9 @@ function buildLabelsStyle(style) {
     layer.paint['text-halo-color'] = '#0a0a0a';
     layer.paint['text-halo-width'] = 1.5;
     layer.paint['text-halo-blur'] = 0.75;
+    // Arm the settle fade-in.
+    layer.paint['text-opacity-transition'] = { duration: FADE_MS, delay: 0 };
+    layer.paint['icon-opacity-transition'] = { duration: FADE_MS, delay: 0 };
     if (layer.layout['text-size'] != null)
       layer.layout['text-size'] = scaleSize(layer.layout['text-size'], TEXT_SCALE);
     if (layer.layout['icon-size'] != null)
@@ -209,19 +221,50 @@ export async function addVectorBasemap(map) {
   //   2. Heavy base geometry — roads, landuse, aeroway: the bulk of the line
   //      tessellation. Land/water/boundaries stay so the map keeps its shape.
   const HEAVY_BASE = /^(highway|road|tunnel|bridge|landuse|landcover|aeroway|park)/;
-  const heavyBaseIds = baseStyle.layers.filter(l => HEAVY_BASE.test(l.id)).map(l => l.id);
-  const labelIds = labelsStyle.layers.map(l => l.id);
   const glBase = base.getMaplibreMap();
   const glLabels = labels.getMaplibreMap();
 
-  // setLayoutProperty throws if the style isn't loaded yet (an early boot fly);
-  // guard so a stray move can never error — the layers just stay put that once.
-  const setVis = (gl, ids, v) => {
-    if (!gl.isStyleLoaded()) return;
-    for (const id of ids) gl.setLayoutProperty(id, 'visibility', v);
+  // The opacity paint property to ramp, by layer type.
+  const opacityProps = type =>
+    type === 'symbol' ? ['text-opacity', 'icon-opacity']
+    : type === 'line' ? ['line-opacity']
+    : type === 'fill' ? ['fill-opacity']
+    : [];
+
+  // Every layer dropped during a move and faded back on settle: all labels,
+  // plus the heavy base geometry (roads/landuse/aeroway).
+  const motionLayers = [
+    ...labelsStyle.layers.map(l => ({ gl: glLabels, id: l.id, props: opacityProps(l.type) })),
+    ...baseStyle.layers
+      .filter(l => HEAVY_BASE.test(l.id))
+      .map(l => ({ gl: glBase, id: l.id, props: opacityProps(l.type) })),
+  ].filter(s => s.props.length);
+
+  // Hide outright during the flight (visibility:none skips the layer entirely,
+  // so it costs nothing per frame). setLayoutProperty throws before the style
+  // loads (an early-boot fly), so guard — the layer just stays put that once.
+  const hideForMove = () => {
+    for (const s of motionLayers) {
+      if (s.gl.isStyleLoaded()) s.gl.setLayoutProperty(s.id, 'visibility', 'none');
+    }
   };
-  const hideForMove = () => { setVis(glLabels, labelIds, 'none'); setVis(glBase, heavyBaseIds, 'none'); };
-  const showOnSettle = () => { setVis(glLabels, labelIds, 'visible'); setVis(glBase, heavyBaseIds, 'visible'); };
+
+  // On settle, reveal at opacity 0 then ramp to 1 — the baked -transition turns
+  // that into a fade, so the one-time populate reads as a reveal, not a pop.
+  const showOnSettle = () => {
+    for (const s of motionLayers) {
+      if (!s.gl.isStyleLoaded()) continue;
+      for (const p of s.props) s.gl.setPaintProperty(s.id, p, 0); // instant: still hidden
+      s.gl.setLayoutProperty(s.id, 'visibility', 'visible');
+    }
+    requestAnimationFrame(() => {
+      for (const s of motionLayers) {
+        if (!s.gl.isStyleLoaded()) continue;
+        for (const p of s.props) s.gl.setPaintProperty(s.id, p, 1); // ramps via -transition
+      }
+    });
+  };
+
   map.on('movestart zoomstart', hideForMove);
   map.on('moveend zoomend', showOnSettle);
 
