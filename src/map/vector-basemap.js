@@ -186,8 +186,9 @@ export async function addVectorBasemap(map) {
   if (!res.ok) throw new Error(`style HTTP ${res.status}`);
   const style = await res.json();
 
+  const baseStyle = buildBaseStyle(style);
   const base = L.maplibreGL({
-    style: buildBaseStyle(style),
+    style: baseStyle,
     attribution: '', // Leaflet attribution set once in basemap.js
   }).addTo(map);
 
@@ -198,16 +199,31 @@ export async function addVectorBasemap(map) {
     attribution: '',
   }).addTo(map);
 
-  // Symbol placement/collision is the single most expensive part of a GL
-  // repaint, and it recomputes continuously while the camera moves. Under
-  // software rendering (no GPU on the VPS) that's what makes flyTo/zoom
-  // visibly choppy. Labels are illegible mid-flight anyway, so drop them
-  // for the animation and let them redraw once the camera settles.
+  // Cut GL repaint cost while the camera flies. Under software rendering (no GPU
+  // on the VPS) every frame of a flyTo re-rasters the whole scene, and the
+  // parabola's wide zoom-out frames are the priciest — that's the zoom stutter.
+  // Two things dominate a repaint and are both useless mid-flight, so drop them
+  // for the duration of the move and restore on settle:
+  //   1. Labels — symbol placement/collision is the single most expensive step,
+  //      and text is illegible while moving anyway.
+  //   2. Heavy base geometry — roads, landuse, aeroway: the bulk of the line
+  //      tessellation. Land/water/boundaries stay so the map keeps its shape.
+  const HEAVY_BASE = /^(highway|road|tunnel|bridge|landuse|landcover|aeroway|park)/;
+  const heavyBaseIds = baseStyle.layers.filter(l => HEAVY_BASE.test(l.id)).map(l => l.id);
   const labelIds = labelsStyle.layers.map(l => l.id);
+  const glBase = base.getMaplibreMap();
   const glLabels = labels.getMaplibreMap();
-  const setLabelVisibility = v => { for (const id of labelIds) glLabels.setLayoutProperty(id, 'visibility', v); };
-  map.on('movestart zoomstart', () => setLabelVisibility('none'));
-  map.on('moveend zoomend', () => setLabelVisibility('visible'));
+
+  // setLayoutProperty throws if the style isn't loaded yet (an early boot fly);
+  // guard so a stray move can never error — the layers just stay put that once.
+  const setVis = (gl, ids, v) => {
+    if (!gl.isStyleLoaded()) return;
+    for (const id of ids) gl.setLayoutProperty(id, 'visibility', v);
+  };
+  const hideForMove = () => { setVis(glLabels, labelIds, 'none'); setVis(glBase, heavyBaseIds, 'none'); };
+  const showOnSettle = () => { setVis(glLabels, labelIds, 'visible'); setVis(glBase, heavyBaseIds, 'visible'); };
+  map.on('movestart zoomstart', hideForMove);
+  map.on('moveend zoomend', showOnSettle);
 
   return { base, labels };
 }
