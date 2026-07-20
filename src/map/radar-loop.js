@@ -245,9 +245,22 @@ export function createRadarLoop(map) {
     requestAnimationFrame(step);
   }
 
+  // While the camera is flying, the software renderer (no GPU on the VPS) is
+  // already saturated re-rastering the basemap every frame. Advancing the loop
+  // then kicks off a concurrent crossfade rAF that fights for the same cores —
+  // exactly the contention that makes flyTo choppy. Freeze frame-advance for
+  // the duration of the move (same movestart→moveend gate the labels use) so
+  // all the CPU goes to the motion; the loop resumes the instant it settles.
   let nextAt = Date.now() + HOLD_NEWEST_MS;
+  let moving = false;
+  map.on('movestart zoomstart', () => { moving = true; });
+  map.on('moveend zoomend', () => {
+    moving = false;
+    nextAt = Date.now() + FRAME_MS; // don't fire a catch-up burst on landing
+  });
+
   setInterval(() => {
-    if (Date.now() < nextAt) return;
+    if (moving || Date.now() < nextAt) return;
     fadeTo((idx + 1) % frames.length);
     nextAt = Date.now() + (idx === frames.length - 1 ? HOLD_NEWEST_MS : FRAME_MS);
   }, 100);

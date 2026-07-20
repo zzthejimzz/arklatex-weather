@@ -31,6 +31,29 @@ Xvfb "$DISPLAY_NUM" -screen 0 "${SIZE}x24" -nolisten tcp &
 
 sleep 2
 
+# CPU affinity: the software renderer (SwiftShader, no GPU here) and the x264
+# encoder both spike at the SAME instant — every camera fly. Left to the
+# scheduler they preempt each other mid-flight, and that thrash is what makes
+# zooms stutter. Give Chromium the low cores and ffmpeg its own top cores so
+# the encoder can never steal cycles from a half-rendered map frame.
+# Split scales with the box: ffmpeg gets ~3/8 of cores (x264 ultrafast 1080p30
+# wants ~3), Chromium gets the rest. Skipped on <4 cores or if taskset is
+# missing — then it just runs unpinned as before.
+CPU_PIN_CHROME=()
+CPU_PIN_FFMPEG=()
+NCORES=$(nproc 2>/dev/null || echo 1)
+if command -v taskset >/dev/null 2>&1 && [ "$NCORES" -ge 4 ]; then
+  FF=$(( (NCORES * 3 + 4) / 8 ))          # round(NCORES * 3/8)
+  [ "$FF" -lt 1 ] && FF=1
+  [ "$FF" -gt $((NCORES - 1)) ] && FF=$((NCORES - 1))
+  CHROME_LAST=$((NCORES - FF - 1))
+  FF_FIRST=$((NCORES - FF))
+  FF_LAST=$((NCORES - 1))
+  CPU_PIN_CHROME=(taskset -c "0-${CHROME_LAST}")
+  CPU_PIN_FFMPEG=(taskset -c "${FF_FIRST}-${FF_LAST}")
+  echo "[stream] ${NCORES} cores: chromium -> 0-${CHROME_LAST}, ffmpeg -> ${FF_FIRST}-${FF_LAST}"
+fi
+
 # --enable-unsafe-swiftshader: the vector basemap needs WebGL, and there is
 # no GPU on the VPS — SwiftShader renders it in software (Chromium ≥128
 # requires the explicit opt-in flag).
@@ -45,7 +68,7 @@ sleep 2
 # WebGL specifically.
 # --disable-gpu-vsync: Xvfb has no real display refresh to pace against —
 # don't throttle frame production to a vsync signal that doesn't exist.
-DISPLAY=$DISPLAY_NUM chromium \
+DISPLAY=$DISPLAY_NUM "${CPU_PIN_CHROME[@]}" chromium \
   --kiosk "$PAGE_URL" \
   --window-size=1920,1080 --window-position=0,0 \
   --enable-unsafe-swiftshader \
@@ -64,7 +87,7 @@ DISPLAY=$DISPLAY_NUM chromium \
 sleep 8  # let the page boot before frames start flowing
 
 # 6 Mbps x264, 2-second keyframes (YouTube's ask), music loops forever.
-ffmpeg -loglevel warning \
+"${CPU_PIN_FFMPEG[@]}" ffmpeg -loglevel warning \
   -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_NUM" \
   -stream_loop -1 -i "$MUSIC_FILE" \
   -map 0:v -map 1:a \
