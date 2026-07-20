@@ -67,7 +67,8 @@ const AURORA_QUIET_EVERY = 5;
 // rotation revisits it far more than once a lap, same idea as a destructive
 // warning getting interleaved between every other stop.
 const GULF_WATCH_PROB = 80;
-const GULF_WATCH_INTERVAL = 5; // repeat visit inserted after every N other stops
+const GULF_WATCH_INTERVAL = 5;     // serious threat (hurricane / High-risk outlook): repeat visit after every N stops
+const GULF_WATCH_INTERVAL_LOW = 9; // a depression / tropical storm in the Gulf still earns repeats, just spaced further apart (each visit is a track+sat pair, so a wider gap keeps the share moderate)
 const GULF_WATCH_DWELL_MS = 14_000;
 
 // Storm-scale warnings get a two-act shot: reflectivity while the camera
@@ -224,11 +225,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // probability area touches the region (the data is peeked when the stop
     // comes up, before anything paints, so a skip never shows on screen).
     const hazardStops = [['torn', `${icon('tornado')} Tornado`], ['wind', `${icon('wind')} Damaging Wind`], ['hail', `${icon('hail')} Large Hail`]];
-    plan.push({ type: 'outlook', day: 'day1', label: 'Day 1 Convective Outlook', dwell: busy ? 15_000 : 20_000 });
-    for (const [hz, name] of hazardStops) plan.push({ type: 'outlook', day: 'day1', hazard: hz, label: `${name} Threat — Day 1`, dwell: busy ? 12_000 : 16_000 });
-    plan.push({ type: 'outlook', day: 'day2', label: 'Day 2 Convective Outlook', dwell: busy ? 12_000 : 20_000 });
-    for (const [hz, name] of hazardStops) plan.push({ type: 'outlook', day: 'day2', hazard: hz, label: `${name} Threat — Day 2`, dwell: busy ? 12_000 : 16_000 });
-    plan.push({ type: 'outlook', day: 'day3', label: 'Day 3 Convective Outlook', dwell: busy ? 12_000 : 20_000 });
+    plan.push({ type: 'outlook', day: 'day1', label: 'Day 1 Convective Outlook', dwell: busy ? 12_000 : 15_000 });
+    for (const [hz, name] of hazardStops) plan.push({ type: 'outlook', day: 'day1', hazard: hz, label: `${name} Threat — Day 1`, dwell: busy ? 9_000 : 12_000 });
+    plan.push({ type: 'outlook', day: 'day2', label: 'Day 2 Convective Outlook', dwell: busy ? 10_000 : 15_000 });
+    for (const [hz, name] of hazardStops) plan.push({ type: 'outlook', day: 'day2', hazard: hz, label: `${name} Threat — Day 2`, dwell: busy ? 9_000 : 12_000 });
+    plan.push({ type: 'outlook', day: 'day3', label: 'Day 3 Convective Outlook', dwell: busy ? 10_000 : 15_000 });
     // Quiet-day depth, in "now → recent past → next 3 days → the week" order:
     // current temps, rainfall totals + the drought picture (a natural pair:
     // who got rain, who still needs it), the 3-day board, one city's 7 days.
@@ -279,6 +280,10 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     const stormN = tropicalStormFeed?.count() ?? 0;
     for (let i = 0; i < stormN; i++) {
       plan.push({ type: 'tropical-storm', idx: i, dwell: busy ? 16_000 : 24_000 });
+      // Follow each track/cone shot with the same system from space — the
+      // GeoColor beauty shot. Basin-wide source, so it frames whether the storm
+      // is in the Gulf or still far out in the Atlantic.
+      plan.push({ type: 'storm-sat', idx: i, dwell: busy ? 13_000 : 18_000 });
     }
     // Tropical outlook whenever the Atlantic has a 7-day development area —
     // existence is the gate (no local-overlap test: remnants travel). With
@@ -325,26 +330,51 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // radar) skip it to keep the rotation on the weather.
     if (!busy) plan.push({ type: 'moon', dwell: 22_000 });
 
-    // A serious Gulf threat gets woven through the whole lap instead of
-    // appearing once: find the top outlook area, and if it's High risk
-    // (≥80%) and actually sits over the Gulf, splice a repeat visit in every
-    // few stops. Prefer the matching tracked storm's own track + cone over
-    // the generic outlook once the system has one — same "coming our way"
-    // bbox check as the area's own camera framing.
+    // A Gulf threat gets woven through the whole lap instead of appearing once.
+    // Two ways to qualify: the NHC is already tracking a system whose current
+    // position sits in the Gulf, or the 7-day outlook still has a High-risk
+    // (≥80%) development area over it. The tracked storm is the stronger and
+    // more common signal — once a disturbance is numbered it graduates out of
+    // the formation outlook, so the prob check alone would miss exactly the
+    // system that most warrants the extra airtime. Prefer that storm's own
+    // track + cone; a hurricane or High-risk area weaves tighter than a
+    // depression/storm.
+    const storms = tropicalStormFeed?.get() ?? [];
+    const gulfStormIdx = storms.findIndex(s => {
+      const fix = s.points[0]?.geometry?.coordinates;
+      return fix && bboxesOverlap([fix[0], fix[1], fix[0], fix[1]], GULF_BBOX);
+    });
     const topArea = (tropicalFeed?.get()?.areas ?? []).at(-1);
     const topProb = topArea ? parseInt(topArea.properties?.prob7day) || 0 : 0;
     const topBox = topArea ? geometryBounds(topArea.geometry) : null;
-    if (topProb >= GULF_WATCH_PROB && bboxesOverlap(topBox, GULF_BBOX)) {
-      const storms = tropicalStormFeed?.get() ?? [];
-      const stormIdx = storms.findIndex(s => {
-        const fix = s.points[0]?.geometry?.coordinates;
-        return fix && bboxesOverlap([fix[0], fix[1], fix[0], fix[1]], GULF_BBOX);
-      });
-      const repeat = stormIdx >= 0
-        ? { type: 'tropical-storm', idx: stormIdx, dwell: GULF_WATCH_DWELL_MS }
-        : { type: 'tropical', dwell: GULF_WATCH_DWELL_MS };
-      for (let i = GULF_WATCH_INTERVAL; i < plan.length; i += GULF_WATCH_INTERVAL + 1) {
-        plan.splice(i, 0, repeat);
+    const outlookThreat = topProb >= GULF_WATCH_PROB && bboxesOverlap(topBox, GULF_BBOX);
+    if (gulfStormIdx >= 0 || outlookThreat) {
+      const gulfStorm = gulfStormIdx >= 0 ? storms[gulfStormIdx] : null;
+      // A woven visit is a unit, not a lone shot: the track+cone immediately
+      // followed by the from-space satellite view, so the two always play back
+      // to back (or the generic outlook shot when nothing's numbered yet).
+      const unit = gulfStorm
+        ? [{ type: 'tropical-storm', idx: gulfStormIdx, dwell: GULF_WATCH_DWELL_MS },
+           { type: 'storm-sat', idx: gulfStormIdx, dwell: GULF_WATCH_DWELL_MS }]
+        : [{ type: 'tropical', dwell: GULF_WATCH_DWELL_MS }];
+      const severe = outlookThreat || gulfStorm?.points[0]?.properties?.stormtype === 'HU';
+      const interval = severe ? GULF_WATCH_INTERVAL : GULF_WATCH_INTERVAL_LOW;
+      // First visit right before the Day 1→2→3 convective block, then a repeat
+      // every `interval` stops — but never land inside a protected run: the
+      // convective outlook progression stays contiguous, and we never split a
+      // track shot from its satellite. If an insert point falls inside such a
+      // run, it's nudged to the next clean boundary.
+      const firstOutlook = plan.findIndex(s => s.type === 'outlook');
+      let i = firstOutlook >= 1 ? firstOutlook : 2;
+      while (i < plan.length) {
+        while (i < plan.length &&
+          ((plan[i - 1]?.type === 'outlook' && plan[i]?.type === 'outlook') ||
+           (plan[i - 1]?.type === 'tropical-storm' && plan[i]?.type === 'storm-sat'))) {
+          i++;
+        }
+        if (i >= plan.length) break;
+        plan.splice(i, 0, ...unit);
+        i += unit.length + interval;
       }
     }
     return plan;
@@ -684,10 +714,45 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const move = info.moveDir
           ? `Moving ${info.moveDir} at ${info.moveMph} mph`
           : 'Nearly stationary';
-        showChip(`${icon('hurricane')} ${info.title}<span class="sub">Max sustained: <b style="color:${info.chip}">${wind}</b> &nbsp;·&nbsp; ${move}</span><span class="sub">Advisory ${info.advisNum} · ${info.advDate} &nbsp;·&nbsp; forecast track &amp; cone of uncertainty — NHC</span>`);
+        // When NHC has posted coastal watches/warnings, call them out on their
+        // own line with the official-color swatches — the "is my coast under
+        // one?" read that matters most locally.
+        const wwLine = info.warnings?.length
+          ? `<span class="sub">${info.warnings.map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`).join(' &nbsp; ')} — coastal watches/warnings in effect</span>`
+          : '';
+        showChip(`${icon('hurricane')} ${info.title}<span class="sub">Max sustained: <b style="color:${info.chip}">${wind}</b> &nbsp;·&nbsp; ${move}</span><span class="sub">Advisory ${info.advisNum} · ${info.advDate} &nbsp;·&nbsp; forecast track &amp; cone of uncertainty — NHC</span>${wwLine}`);
         const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
         if (info.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
         fly(b.pad(0.05));
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'storm-sat': {
+        // The active system from space: GIBS GeoColor framed on the storm, a
+        // true-color companion to the track/cone shot just before it. No track
+        // overlay — that shot already carried it; this is the raw satellite look.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        const storm = (tropicalStormFeed?.get() ?? [])[step.idx];
+        if (!storm?.points?.length) return advance(); // advisory dropped since the plan was built
+        const ch = satelliteLayer?.show('geocolor');
+        if (!ch) return advance();
+        outlookLayer.hide(); // full-frame imagery — risk fills bleeding through read as color cast
+        outlookHidden = true;
+        const name = storm.points[0].properties.stormname || 'Tropical system';
+        showChip(`${icon('satellite')} ${name} from space<span class="sub">${ch.sub} · GOES-East GeoColor — NASA GIBS</span>`);
+        // Frame the storm itself: union of the cone, track, and forecast fixes,
+        // then a minimum ~6° box so even a single-fix depression fills the frame.
+        const boxes = [storm.cone?.geometry, storm.track?.geometry, ...storm.points.map(p => p.geometry)]
+          .map(geometryBounds).filter(Boolean);
+        const b = L.latLngBounds();
+        boxes.forEach(x => b.extend(L.latLngBounds(boundsToLeaflet(x))));
+        if (!b.isValid()) return advance();
+        const c = b.getCenter();
+        b.extend([c.lat + 3, c.lng + 3]).extend([c.lat - 3, c.lng - 3]);
+        fly(b.pad(0.08));
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }

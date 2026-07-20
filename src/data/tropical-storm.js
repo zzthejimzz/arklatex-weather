@@ -11,8 +11,8 @@ const SERVICE =
 // The service reserves five concurrent storm "slots" per basin (AT1–AT5,
 // EP1–EP5, CP1–CP5), each a fixed block of sub-layers. Only the Atlantic
 // slots can put a storm over the Gulf. Within a slot, Forecast Points /
-// Forecast Track / Forecast Cone sit at base / base+1 / base+2 (verified
-// against the service's layer list 2026-07-19).
+// Forecast Track / Forecast Cone / Watch-Warning sit at base / base+1 /
+// base+2 / base+3 (verified against the service's layer list 2026-07-20).
 const AT_SLOT_BASE = [6, 32, 58, 84, 110];
 
 const POINT_FIELDS =
@@ -45,11 +45,14 @@ async function fetchSlot(base) {
     const points = await fetchFeatures(base, POINT_FIELDS, false);
     if (!points.length) return { ok: true, storm: null }; // slot unoccupied
     points.sort((a, b) => (a.properties.tau ?? 0) - (b.properties.tau ?? 0));
-    const [track, cone] = await Promise.all([
+    const [track, cone, warnings] = await Promise.all([
       fetchFeatures(base + 1, 'stormname', true),
       fetchFeatures(base + 2, 'stormname', true),
+      // Watch-Warning coastal segments — polylines tagged by `tcww` (base+3).
+      // Absent until watches/warnings are posted, so an empty array is normal.
+      fetchFeatures(base + 3, 'tcww', true),
     ]);
-    return { ok: true, storm: { points, track: track[0] ?? null, cone: cone[0] ?? null } };
+    return { ok: true, storm: { points, track: track[0] ?? null, cone: cone[0] ?? null, warnings } };
   } catch (err) {
     console.warn('[tropical-storm] slot fetch failed:', err);
     return { ok: false, storm: null };

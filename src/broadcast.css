@@ -1011,10 +1011,23 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   margin: -6px 0 0 -6px; border-radius: 50%; border: 2px solid #fff;
   box-shadow: 0 0 5px rgba(0, 0, 0, 0.85);
 }
-.storm-pt.now .dot { width: 17px; height: 17px; margin: -9px 0 0 -9px; }
+.storm-pt.now .dot { width: 20px; height: 20px; margin: -10px 0 0 -10px; border-width: 3px; }
+/* Pulsing ring on the current fix: sits on the dot, then expands and fades
+   outward on a loop so the eye lands on where the storm is right now. Border
+   color is set inline per tier; z-index below the dot so the dot stays crisp. */
+.storm-pt.now .ring {
+  position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+  margin: -10px 0 0 -10px; border-radius: 50%; border: 3px solid #fff;
+  opacity: 0.85; animation: storm-pulse 1.6s ease-out infinite;
+}
+@keyframes storm-pulse {
+  0%   { transform: scale(1);   opacity: 0.85; }
+  70%  { transform: scale(3.2); opacity: 0; }
+  100% { transform: scale(3.2); opacity: 0; }
+}
 .storm-pt .lbl {
   position: absolute; top: 50%; left: 15px; transform: translateY(-50%);
   white-space: nowrap; font-size: 13px; font-weight: 700; color: #fff;
   text-shadow: 0 0 5px rgba(0, 0, 0, 0.9), 0 2px 3px rgba(0, 0, 0, 0.75);
 }
-.storm-pt.now .lbl { left: 18px; font-size: 16px; }
+.storm-pt.now .lbl { left: 20px; font-size: 16px; }
