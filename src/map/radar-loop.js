@@ -35,6 +35,34 @@ const tileBeat = track('radar-tiles', { pollMs: REFRESH_MS });
 
 export const radarCacheSize = () => imgCache.size; // soak-test hook
 
+// IEM answers a malformed tile request with a solid-red "Invalid TMS Request"
+// PNG — HTTP 200 and CORS-valid (ACAO:*), so the canvas-taint check in _render
+// doesn't catch it, and the LUT would recolor it into a bright orange smear on
+// air. It's pure opaque red edge to edge (real reflectivity never fills a whole
+// tile corner-to-corner with exact max-red), so detect that signature and treat
+// it as a failed load. Runs once per image (loadImage is cached per URL), off
+// the per-frame render path; a fresh 16×16 probe canvas avoids a tainted tile
+// permanently poisoning a shared one.
+function isErrorTile(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 16;
+    const cx = c.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(img, 0, 0, 16, 16);
+    const d = cx.getImageData(0, 0, 16, 16).data;
+    // Corners + mid-edges of the 16×16 probe. The error graphic loads as solid
+    // ~(240,0,0,255) everywhere; real reflectivity is transparent at tile edges
+    // and never uniformly max-red across all of these points.
+    for (const i of [0, 15, 8, 240, 255, 248]) {
+      const o = i * 4;
+      if (!(d[o] > 200 && d[o + 1] < 40 && d[o + 2] < 40 && d[o + 3] > 240)) return false;
+    }
+    return true;
+  } catch {
+    return false; // tainted (no CORS) — the render path's taint check handles it
+  }
+}
+
 function loadImage(url) {
   let p = imgCache.get(url);
   if (p) return p;
@@ -49,6 +77,11 @@ function loadImage(url) {
     }, IMG_SETTLE_MS);
     img.onload = () => {
       clearTimeout(timeout);
+      if (isErrorTile(img)) {
+        imgCache.delete(url); // don't cache the error graphic; a retry may land real data
+        reject(new Error('IEM error tile'));
+        return;
+      }
       tileBeat.ok();
       resolve(img);
     };
