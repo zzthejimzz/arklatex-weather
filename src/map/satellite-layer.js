@@ -6,6 +6,7 @@
 // reflectivity loop keeps animating on top — the classic satellite/radar
 // composite — so the shot never reads as a freeze-frame.
 import L from 'leaflet';
+import { safeTmsLayer } from './tms-tile.js';
 import { sunTimes } from '../utils/sun.js';
 
 const BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0';
@@ -51,7 +52,7 @@ export function createSatelliteLayer(map, geo) {
   function show(key) {
     hide();
     const channel = CHANNELS.find(c => c.key === key) ?? CHANNELS[1];
-    layer = L.tileLayer(`${BASE}/${channel.tiles}/{z}/{x}/{y}.png?_ts=${Date.now()}`, {
+    layer = safeTmsLayer(`${BASE}/${channel.tiles}/{z}/{x}/{y}.png?_ts=${Date.now()}`, {
       pane: 'satellite',
       opacity: 0,
       maxZoom: MAX_ZOOM,

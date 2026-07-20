@@ -100,6 +100,14 @@ const SmoothRadarLayer = L.GridLayer.extend({
     const announce = () => {
       if (!announced) { announced = true; done(null, tile); }
     };
+
+    // Non-finite coords (a transient NaN zoom/center) would build a bad TMS URL
+    // — IEM answers those with a red "Invalid TMS Request" PNG. Skip the fetch
+    // and leave the tile transparent; Leaflet re-requests once the map settles.
+    if (!Number.isFinite(coords.x) || !Number.isFinite(coords.y) || !Number.isFinite(coords.z)) {
+      done(null, tile);
+      return tile;
+    }
     const attempt = (tryNo) => {
       this._render(coords, tile).then(
         (complete) => {

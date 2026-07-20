@@ -21,7 +21,7 @@
 // reflectivity loop. Freshly shown, all frames are the same current snapshot
 // (nothing to animate yet); real motion appears over the next few refresh
 // cycles as each slot gets overwritten with an actual later scan.
-import L from 'leaflet';
+import { safeTmsLayer } from './tms-tile.js';
 
 // WSR-88Ds covering the ArkLaTex and its edges.
 const SITES = [
@@ -76,7 +76,7 @@ export function createVelocityLayer(map) {
   let lastSnapshotAt = 0;
 
   function makeFrame(s, ts) {
-    return L.tileLayer(url(s.id, ts), {
+    return safeTmsLayer(url(s.id, ts), {
       pane: 'velocity',
       opacity: 0,
       maxZoom: MAX_ZOOM,

@@ -7,7 +7,7 @@
 //
 // The reflectivity loop is hidden (not dimmed) while this mode is up — live
 // echoes animating over accumulated totals is two precip palettes fighting.
-import L from 'leaflet';
+import { safeTmsLayer } from './tms-tile.js';
 import { PRECIP_LUT } from './precip-lut.js';
 import { pointInGeometry } from '../utils/geometry.js';
 import { nearestPlaceLabel } from './cities.js';
@@ -193,7 +193,7 @@ export function createRainfallLayer(map, geo) {
   function show(key, onReady) {
     hide();
     const period = PERIODS.find(p => p.key === key) ?? PERIODS[0];
-    layer = L.tileLayer(`${BASE}/${period.tiles}/{z}/{x}/{y}.png?_ts=${Date.now()}`, {
+    layer = safeTmsLayer(`${BASE}/${period.tiles}/{z}/{x}/{y}.png?_ts=${Date.now()}`, {
       pane: 'rainfall',
       opacity: 0,
       maxZoom: MAX_ZOOM,
