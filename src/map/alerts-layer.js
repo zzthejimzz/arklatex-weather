@@ -4,6 +4,7 @@
 // dashed in the 'watches' pane below. The alert the director is touring gets
 // a heavier, brighter treatment, and outlines thicken as the camera zooms in.
 import L from 'leaflet';
+import { zoomThin } from '../utils/zoom-weight.js';
 
 export function createAlertsLayer(map) {
   const group = L.layerGroup().addTo(map);
@@ -18,15 +19,27 @@ export function createAlertsLayer(map) {
     return z <= 9 ? 0 : Math.min(3.5, (z - 9) * 1.1);
   }
 
+  // ...and the same 6-8px line (a Heat Advisory county outline, say) looks
+  // disproportionately heavy pulled back past its normal viewing zoom — thin
+  // it below zoom 8 the same way, so the ramp shrinks below 8, holds flat
+  // 8-9, then grows again above 9 via zoomBoost.
   function baseWeight(highlighted) {
-    return (highlighted ? 8 : 6) + zoomBoost();
+    return (highlighted ? 8 : 6) * zoomThin(map) + zoomBoost();
+  }
+
+  // Watch boxes (tornado/severe t-storm/flood watch parallelograms) are big
+  // enough to still read at a pulled-back convective-outlook zoom, but a flat
+  // 2.5px outline looks disproportionately heavy against the shrunken
+  // geometry — thin it out below zoom 8, same floor/ramp as above.
+  function watchWeight() {
+    return 2.5 * zoomThin(map);
   }
 
   function visualStyle(alert, highlighted) {
     const watch = !!alert.style.watch;
     return {
       color: alert.style.color,
-      weight: watch ? 2.5 : baseWeight(highlighted),
+      weight: watch ? watchWeight() : baseWeight(highlighted),
       opacity: 1,
       dashArray: watch ? '10 8' : null,
       fillColor: alert.style.color,
@@ -64,7 +77,7 @@ export function createAlertsLayer(map) {
     const scale = map.getZoomScale(map.getZoom(), paneZoom);
     for (const { layer, casing, alert } of rendered.values()) {
       const highlighted = alert.key === highlightKey;
-      const line = alert.style.watch ? 2.5 : baseWeight(highlighted);
+      const line = alert.style.watch ? watchWeight() : baseWeight(highlighted);
       setStrokeWidth(layer, line / scale);
       if (casing) setStrokeWidth(casing, (baseWeight(highlighted) + 3.5) / scale);
     }
