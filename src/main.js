@@ -84,6 +84,7 @@ async function boot() {
   window.addEventListener('resize', fitStage);
   const params = new URLSearchParams(location.search);
   const visualTest = params.has('visual-test');
+  const vpsMode = params.has('vps');
   if (visualTest) document.documentElement.dataset.visualTest = '';
 
   const [geo] = await Promise.all([loadGeo(), loadPopulationGrid()]);
@@ -91,7 +92,7 @@ async function boot() {
   const map = createBroadcastMap(document.getElementById('map'), geo.bbox);
   addStateBorders(map);
   addCityLabels(map);
-  const radar = createRadarLoop(map);
+  const radar = createRadarLoop(map, { lowPower: vpsMode });
   const velocityLayer = createVelocityLayer(map);
   const mcdLayer = createMcdLayer(map);
 

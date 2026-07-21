@@ -20,6 +20,7 @@ const XFADE_MS = 240;
 const REFRESH_MS = 5 * 60 * 1000;
 const OPACITY = 1; // the palette carries per-intensity transparency
 const MAX_ZOOM = 14; // IEM serves n0q tiles through z14 (verified)
+const TILE_SIZE = 256;
 
 // Shared image cache. Every tile render pulls its 8 neighbors — which are
 // other tiles' centers — and the director prewarms fly destinations, so the
@@ -114,6 +115,7 @@ const SmoothRadarLayer = L.GridLayer.extend({
   initialize(url, options) {
     L.GridLayer.prototype.initialize.call(this, options);
     this._url = url;
+    this._outputScale = options.outputScale ?? 2;
   },
 
   setUrl(url) {
@@ -123,8 +125,11 @@ const SmoothRadarLayer = L.GridLayer.extend({
 
   createTile(coords, done) {
     const tile = document.createElement('canvas');
-    tile.width = 512; // 2× supersampled — Leaflet displays at 256 via style
-    tile.height = 512;
+    // Local/browser mode keeps the 2× supersampled output. The VPS stream uses
+    // 1×: at 1080p/6 Mbps the visual difference is small, while the color pass
+    // and every persistent canvas backing store are 75% smaller.
+    tile.width = TILE_SIZE * this._outputScale;
+    tile.height = TILE_SIZE * this._outputScale;
     const size = this.getTileSize();
     tile.style.width = `${size.x}px`;
     tile.style.height = `${size.y}px`;
@@ -224,8 +229,9 @@ const SmoothRadarLayer = L.GridLayer.extend({
   },
 });
 
-export function createRadarLoop(map) {
+export function createRadarLoop(map, { lowPower = false } = {}) {
   const url = (i, ts) => `${BASE}${OFFSETS[i]}/{z}/{x}/{y}.png?_ts=${ts}`;
+  const outputScale = lowPower ? 1 : 2;
 
   let ts = Date.now();
   // All frames stay on the map at opacity 0 so their tiles are loaded and
@@ -235,13 +241,15 @@ export function createRadarLoop(map) {
       pane: 'radar',
       opacity: 0,
       maxZoom: MAX_ZOOM,
-      // Camera is always flying somewhere — load while moving, keep a fat
-      // ring of rendered tiles around the view, and don't re-render at every
-      // intermediate zoom during a fly (each tile is an expensive 9-fetch +
-      // blur pipeline; updateInterval throttles the churn).
-      updateWhenIdle: false,
-      keepBuffer: 4,
-      updateInterval: 350,
+      outputScale,
+      // Keep the already-painted grid and let Leaflet transform it for the
+      // duration of a camera flight. Each frame is a costly 9-image + blur
+      // pipeline; rebuilding seven grids at every crossed integer zoom was
+      // the dominant software-rendering spike on the VPS. Destination source
+      // images are still warmed by prewarm(), then grids rebuild once at rest.
+      updateWhenIdle: true,
+      updateWhenZooming: false,
+      keepBuffer: 2,
     }).addTo(map),
   );
 
@@ -294,8 +302,10 @@ export function createRadarLoop(map) {
   // all the CPU goes to the motion; the loop resumes the instant it settles.
   let nextAt = Date.now() + HOLD_NEWEST_MS;
   let moving = false;
-  map.on('movestart zoomstart', () => { moving = true; });
-  map.on('moveend zoomend', () => {
+  // Leaflet zooms also emit the move lifecycle; subscribing to both event
+  // pairs ran this settle work twice for every flyTo().
+  map.on('movestart', () => { moving = true; });
+  map.on('moveend', () => {
     moving = false;
     nextAt = Date.now() + FRAME_MS; // don't fire a catch-up burst on landing
   });

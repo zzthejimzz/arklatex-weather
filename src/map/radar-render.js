@@ -104,11 +104,11 @@ function boxBlur(src, tmp, w, h, r) {
 const MIN_DECODE_DBZ = 5; // ignore clear-air/clutter returns entirely
 
 /**
- * Render one smoothed 512×512 tile from a padded source canvas.
+ * Render one smoothed output tile from a padded source canvas.
  * @param {HTMLCanvasElement} padded  256+2·pad square: center tile + neighbor
  *                                    strips already drawn in (raw IEM pixels)
  * @param {number} pad     padding in source pixels (must be ≥ 2·radius)
- * @param {HTMLCanvasElement} out     512×512 destination tile canvas
+ * @param {HTMLCanvasElement} out     Destination tile canvas (256 or 512 px)
  * @param {number} radius  box-blur radius in source pixels
  */
 export function renderRadarTile(padded, pad, out, radius) {
@@ -135,7 +135,7 @@ export function renderRadarTile(padded, pad, out, radius) {
   boxBlur(cov, tmp, S, S, radius);
   boxBlur(cov, tmp, S, S, r1);
 
-  const OUT = out.width; // 512 — 2× the tile grid for smooth bilinear output
+  const OUT = out.width; // 256 on the VPS; 512 for 2× local supersampling
   const dst = out.getContext('2d');
   const outData = dst.createImageData(OUT, OUT);
   const o = outData.data;

@@ -19,7 +19,9 @@ set -euo pipefail
 DISPLAY_NUM=:99
 SIZE=1920x1080
 FPS=30
-PAGE_URL="http://127.0.0.1:8080/"
+# The VPS flag selects the lower-cost radar output path; local/dev rendering
+# keeps the 2× supersampled tiles for visual review.
+PAGE_URL="http://127.0.0.1:8080/?vps"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY:?set in /etc/arklatex.env}"
 : "${MUSIC_FILE:?set in /etc/arklatex.env}"
 : "${MUSIC_VOLUME:=0.4}"

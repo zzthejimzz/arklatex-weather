@@ -23,6 +23,10 @@ import '@maplibre/maplibre-gl-leaflet';
 
 const STYLE_URL = 'https://tiles.openfreemap.org/styles/positron';
 const FETCH_TIMEOUT_MS = 8000;
+// The plugin default is 0.1, making each GL canvas 120% of the map in both
+// dimensions (44% more pixels). Camera updates keep the canvases aligned, so
+// a narrow overscan is enough while materially reducing SwiftShader work.
+const GL_PADDING = 0.02;
 
 // ---- grey Pivotal palette ---------------------------------------------------
 const LAND = '#595959';
@@ -201,6 +205,7 @@ export async function addVectorBasemap(map) {
   const baseStyle = buildBaseStyle(style);
   const base = L.maplibreGL({
     style: baseStyle,
+    padding: GL_PADDING,
     attribution: '', // Leaflet attribution set once in basemap.js
   }).addTo(map);
 
@@ -208,6 +213,7 @@ export async function addVectorBasemap(map) {
   const labels = L.maplibreGL({
     pane: 'labels',
     style: labelsStyle,
+    padding: GL_PADDING,
     attribution: '',
   }).addTo(map);
 
@@ -265,8 +271,10 @@ export async function addVectorBasemap(map) {
     });
   };
 
-  map.on('movestart zoomstart', hideForMove);
-  map.on('moveend zoomend', showOnSettle);
+  // A Leaflet zoom also emits movestart/moveend. Listening to both lifecycle
+  // pairs hid every layer twice and ran the settle/fade property loop twice.
+  map.on('movestart', hideForMove);
+  map.on('moveend', showOnSettle);
 
   return { base, labels };
 }
