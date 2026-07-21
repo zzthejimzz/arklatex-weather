@@ -39,6 +39,7 @@ import { createCityForecasts } from './data/forecast.js';
 import { createObservationsSource } from './data/observations.js';
 import { createDirector } from './director/director.js';
 import { createLiveSource } from './data/alerts.js';
+import { heatAlert } from './data/heat.js';
 import { createReportsSource, pickTourReports } from './data/reports.js';
 import { createMcdSource, createMcdReplaySource, pickTourMcds } from './data/mcd.js';
 import { createReplaySource } from './data/replay.js';
@@ -582,6 +583,17 @@ async function boot() {
         }, 500);
       }, 2_500);
     }
+  }
+  if (params.has('heat')) {
+    // Dev-only: ?heat forces the heat-safety page. A live heat alert may not be
+    // in the feed, so synthesize one from the tier param to check the card:
+    // ?heat (warning look, purple) / ?heat=advisory / ?heat=watch. Delayed past
+    // the director's first overview tick, same as ?moon/?aurora.
+    const event = params.get('heat') === 'advisory' ? 'Heat Advisory'
+      : params.get('heat') === 'watch' ? 'Extreme Heat Watch'
+      : 'Extreme Heat Warning';
+    const heat = heatAlert([{ props: { event } }]);
+    setTimeout(() => forecastPanel.showHeat(heat), 2_500);
   }
   if (params.has('moon')) {
     // ?moon forces the moon-phases page — computed locally, nothing to wait

@@ -411,6 +411,53 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Heat-safety page — surfaces the NWS's own preparedness advice while a heat
+  // warning/advisory/watch is in effect (heat.js picks the top product). The
+  // tips are the canonical NWS heat-safety messaging; the card header ties them
+  // to the live alert, and the tier drives the accent color + pill.
+  function showHeat(heat) {
+    if (!heat) return false;
+    const TIER_LABEL = {
+      warning: 'Warning in effect',
+      advisory: 'Advisory in effect',
+      watch: 'Watch — dangerous heat possible',
+    };
+    const tips = [
+      { icon: 'drop', text: 'Drink plenty of water — don\'t wait until you\'re thirsty.' },
+      { icon: 'hot', text: 'Stay in air conditioning during the hottest part of the day.' },
+      { icon: 'warning', text: 'Never leave children or pets in a parked vehicle.' },
+      { icon: 'population', text: 'Check on elderly relatives, neighbors, and anyone without AC.' },
+      { icon: 'clock', text: 'Save hard outdoor work for early morning or evening.' },
+      { icon: 'sun', text: 'Wear light, loose clothing and rest often in the shade.' },
+    ];
+    const { color } = heat;
+    const area = heat.count > 1 ? `${heat.count} areas under this alert` : 'In effect for the ArkLaTex';
+    const tipRow = t => `
+      <div class="heat-tip">
+        <span class="ht-ico" style="color:${color}">${icon(t.icon)}</span>
+        <span class="ht-text">${t.text}</span>
+      </div>`;
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">${icon('hot')} Heat <span class="grad">Safety</span></div>
+        <div class="fc-sub">${area} · National Weather Service</div>
+      </div>
+      <div class="alm-now heat-now" style="border-color:${color}66">
+        <div class="an-label">${heat.event}</div>
+        <div class="an-read">
+          <span class="an-pill" style="color:${color};background:${color}1f;border-color:${color}66">${TIER_LABEL[heat.tier]}</span>
+        </div>
+      </div>
+      <div class="alm-sec">Stay Safe in the Heat</div>
+      <div class="heat-tips">${tips.map(tipRow).join('')}</div>
+      <div class="frost-tip heat-illness">${icon('warning')} Heat stroke is a medical emergency — call <b>911</b> if someone has hot, dry skin, confusion, or stops sweating. Move them somewhere cool and cool them with water while you wait.</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   // Moon-phases page — computed locally in moon.js, so unlike the other
   // pages there is no feed to wait on and this can never return false.
   function showMoon() {
@@ -457,5 +504,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showMoon, hide, ready };
+  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showMoon, hide, ready };
 }

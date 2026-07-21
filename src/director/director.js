@@ -35,6 +35,7 @@ import { isTourable, announces } from './scoring.js';
 import { track } from '../utils/health.js';
 import { formatInches, legendHtml } from '../map/rainfall-layer.js';
 import { formatDate } from '../utils/time.js';
+import { heatAlert } from '../data/heat.js';
 import { icon } from '../ui/icons.js';
 
 const TOUR_DWELL_MS = 25_000;
@@ -70,6 +71,13 @@ const GULF_WATCH_PROB = 80;
 const GULF_WATCH_INTERVAL = 5;     // serious threat (hurricane / High-risk outlook): repeat visit after every N stops
 const GULF_WATCH_INTERVAL_LOW = 9; // a depression / tropical storm in the Gulf still earns repeats, just spaced further apart (each visit is a track+sat pair, so a wider gap keeps the share moderate)
 const GULF_WATCH_DWELL_MS = 14_000;
+
+// Heat safety tips ride the same panel as the almanac pages, gated on a live
+// NWS heat product (heat.js). A Heat Advisory/Watch airs the page once a lap;
+// an Extreme/Excessive Heat *Warning* is dangerous enough that the lap revisits
+// it, the same "appointment viewing" weave the Gulf watch uses.
+const HEAT_WARNING_INTERVAL = 6;
+const HEAT_WARNING_DWELL_MS = 16_000;
 
 // Storm-scale warnings get a two-act shot: reflectivity while the camera
 // settles, then a switch to single-site base velocity for the back half of the
@@ -314,6 +322,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // Pollen rides right behind air quality (the same "what's in the air"
     // story) — every city's index dot on the map, one city's card.
     if (pollenFeed?.ready()) plan.push({ type: 'pollen', dwell: busy ? 16_000 : 22_000 });
+    // Heat safety while an NWS heat product is in effect — the "what to do in
+    // dangerous heat" page, closing out the health cluster. Advisory/watch get
+    // this single stop; a warning also gets woven through the lap below.
+    const heat = heatAlert(active);
+    if (heat) plan.push({ type: 'heat', dwell: busy ? 16_000 : 22_000 });
     // Aurora / Kp-index outlook rides right behind frost — same panel,
     // national in scope (no locality gate). An actual G1+ storm is real news
     // any cycle; but this far south "all quiet" is the case ~99% of the
@@ -359,25 +372,38 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         : [{ type: 'tropical', dwell: GULF_WATCH_DWELL_MS }];
       const severe = outlookThreat || gulfStorm?.points[0]?.properties?.stormtype === 'HU';
       const interval = severe ? GULF_WATCH_INTERVAL : GULF_WATCH_INTERVAL_LOW;
-      // First visit right before the Day 1→2→3 convective block, then a repeat
-      // every `interval` stops — but never land inside a protected run: the
-      // convective outlook progression stays contiguous, and we never split a
-      // track shot from its satellite. If an insert point falls inside such a
-      // run, it's nudged to the next clean boundary.
-      const firstOutlook = plan.findIndex(s => s.type === 'outlook');
-      let i = firstOutlook >= 1 ? firstOutlook : 2;
-      while (i < plan.length) {
-        while (i < plan.length &&
-          ((plan[i - 1]?.type === 'outlook' && plan[i]?.type === 'outlook') ||
-           (plan[i - 1]?.type === 'tropical-storm' && plan[i]?.type === 'storm-sat'))) {
-          i++;
-        }
-        if (i >= plan.length) break;
-        plan.splice(i, 0, ...unit);
-        i += unit.length + interval;
-      }
+      weaveThrough(plan, unit, interval);
+    }
+
+    // A heat *warning* (not a lesser advisory/watch) is appointment safety
+    // messaging: weave the safety-tips page through the lap so it recurs, on top
+    // of the single stop already pushed with the health cluster.
+    if (heat?.tier === 'warning') {
+      weaveThrough(plan, [{ type: 'heat', dwell: HEAT_WARNING_DWELL_MS }], HEAT_WARNING_INTERVAL);
     }
     return plan;
+  }
+
+  // Distribute repeat visits of a stop-unit across an already-built plan so an
+  // ongoing threat is revisited through the lap instead of airing once. First
+  // insert lands right before the Day 1→2→3 convective block, then one every
+  // `interval` stops — but never inside a protected run: the convective-outlook
+  // progression stays contiguous and a track shot is never split from its
+  // satellite, so an insert point inside such a run is nudged to the next clean
+  // boundary.
+  function weaveThrough(plan, unit, interval) {
+    const firstOutlook = plan.findIndex(s => s.type === 'outlook');
+    let i = firstOutlook >= 1 ? firstOutlook : 2;
+    while (i < plan.length) {
+      while (i < plan.length &&
+        ((plan[i - 1]?.type === 'outlook' && plan[i]?.type === 'outlook') ||
+         (plan[i - 1]?.type === 'tropical-storm' && plan[i]?.type === 'storm-sat'))) {
+        i++;
+      }
+      if (i >= plan.length) break;
+      plan.splice(i, 0, ...unit);
+      i += unit.length + interval;
+    }
   }
 
   // Back to plain reflectivity: cancel a pending mid-shot velocity switch,
@@ -547,6 +573,21 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         hideChip();
         outlookLayer.show('day1');
         if (!forecastPanel?.showAurora(auroraFeed?.get())) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'heat': {
+        // Heat-safety tips while an NWS heat product is in effect. Re-read the
+        // live alerts here — the plan may be minutes old and the heat could
+        // have expired (or a hotter tier come up) since it was built.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        const heat = heatAlert(active);
+        if (!heat || !forecastPanel?.showHeat(heat)) return advance();
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;

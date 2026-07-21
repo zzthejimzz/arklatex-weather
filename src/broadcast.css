@@ -900,6 +900,25 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 }
 .pollen-day .pd-val { font-size: 44px; font-weight: 800; line-height: 1.1; }
 .pollen-tip { margin-top: 14px; }
+
+/* Heat-safety page (rides the forecast panel) */
+.heat-now { margin-bottom: 4px; }
+.heat-now .an-label { color: var(--text-primary); font-size: 17px; letter-spacing: 0.04em; }
+.heat-tips { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; }
+.heat-tip {
+  display: flex; align-items: center; gap: 15px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+}
+.heat-tip .ht-ico { flex: none; display: flex; font-size: 26px; }
+.heat-tip .ht-text { font-size: 18px; line-height: 1.35; }
+.heat-illness {
+  background: rgba(224, 85, 95, 0.10);
+  border-color: rgba(224, 85, 95, 0.30);
+}
+.heat-illness b { color: #f2777f; }
 /* Map chip: temp-chip layout with a category-colored edge so the intensity
    reads at a glance even before the number does. */
 .pollen-chip { border-color: var(--pollen-color, var(--border)); }

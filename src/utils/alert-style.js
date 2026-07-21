@@ -27,6 +27,12 @@ const STYLES = [
   [/winter weather/i,                  { color: '#b57edc', icon: icon('ice'),          abbr: 'WINTER',    tone: 'blue' }],
   [/freeze|frost|cold/i,               { color: '#5b8dd6', icon: icon('freeze'),       abbr: 'COLD',      tone: 'blue' }],
   [/high wind|wind advisory/i,         { color: '#d8b25c', icon: icon('wind'),         abbr: 'WIND',      tone: 'amber' }],
+  // Extreme/Excessive Heat *Warning* gets a deep violet, well clear of the
+  // salmon Heat Advisory below — the two otherwise read as the same color on a
+  // grey map. Kin to NWS's own MediumVioletRed for the warning, pushed toward
+  // purple and darkened for the broadcast map (same readability call as the
+  // watch colors above). Must precede the generic /heat/ rule (first match wins).
+  [/(extreme|excessive) heat warning/i, { color: '#a21caf', icon: icon('hot'),        abbr: 'HEAT WARN', tone: 'red' }],
   [/heat/i,                            { color: '#e0555f', icon: icon('hot'),          abbr: 'HEAT',      tone: 'red' }],
   [/dense fog/i,                       { color: '#8fa3bf', icon: icon('fog'),          abbr: 'FOG',       tone: 'blue' }],
   [/red flag|fire/i,                   { color: '#ff6347', icon: icon('fire'),         abbr: 'FIRE',      tone: 'red' }],
