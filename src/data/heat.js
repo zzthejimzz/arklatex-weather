@@ -20,9 +20,10 @@ function tierFor(event) {
   return HEAT_TIERS.find(t => t.re.test(event))?.tier ?? null;
 }
 
-// Most urgent heat product in effect across the region, or null. `count` is how
-// many separate alerts share the top tier — a stand-in for how widespread the
-// heat is across the region's zones.
+// Most urgent heat product in effect across the region, or null. Every alert
+// sharing the top tier comes back too: `count` (how widespread the heat is
+// across the region's zones) is that many, and `keys` lets the director flash
+// exactly those polygons on the map while the safety card is up.
 export function heatAlert(alerts = []) {
   let best = null;
   for (const a of alerts) {
@@ -31,6 +32,11 @@ export function heatAlert(alerts = []) {
     if (!best || RANK[tier] > RANK[best.tier]) best = { tier, event: a.props.event };
   }
   if (!best) return null;
-  const count = alerts.filter(a => tierFor(a.props?.event ?? '') === best.tier).length;
-  return { ...best, count, color: styleForEvent(best.event).color };
+  const top = alerts.filter(a => tierFor(a.props?.event ?? '') === best.tier);
+  return {
+    ...best,
+    count: top.length,
+    keys: top.map(a => a.key).filter(Boolean),
+    color: styleForEvent(best.event).color,
+  };
 }

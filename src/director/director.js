@@ -589,6 +589,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const heat = heatAlert(active);
         if (!heat || !forecastPanel?.showHeat(heat)) return advance();
         fly(regionBounds);
+        // Strobe the affected heat polygons white ↔ their tier color for the
+        // whole card — the same attention flash a newly issued warning gets,
+        // held for the full dwell (not the default ~10 s) so viewers can place
+        // the area while the tips are up.
+        for (const key of heat.keys) alertsLayer.flash(key, FLY_MS + step.dwell);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }
