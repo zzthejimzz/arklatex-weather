@@ -28,8 +28,9 @@ function url(layer) {
 // "Pacific" — only the Atlantic can put remnants over the region.
 const isAtlantic = f => /^atl/i.test(f.properties?.basin ?? '');
 
-export function createTropicalSource() {
+export function createTropicalSource(onChange) {
   let data = null; // { areas, points } after the first successful poll
+  let sig = '';
 
   async function poll() {
     let delay = REFRESH_MS;
@@ -45,6 +46,11 @@ export function createTropicalSource() {
           (parseInt(a.properties.prob7day) || 0) - (parseInt(b.properties.prob7day) || 0)),
         points,
       };
+      // A new/changed development area should reach the rotation promptly, not
+      // wait for the current lap to wrap (~10+ min). Gate on the set of areas
+      // and their formation chances.
+      const next = data.areas.map(a => a.properties.prob7day).join('|');
+      if (next !== sig) { sig = next; onChange?.(); }
     } catch (err) {
       console.warn('[tropical] fetch failed:', err);
       // An empty basin is a successful answer; only a never-succeeded poll

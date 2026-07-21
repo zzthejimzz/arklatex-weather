@@ -103,6 +103,10 @@ export function createTropicalStormLayer(map) {
       }));
     }
     storm.points.forEach((f, i) => {
+      // NHC intermittently emits a forecast fix with null geometry; skip its
+      // dot rather than dereference null coordinates (an uncaught throw here
+      // takes down the whole director tick, blanking the storm every lap).
+      if (!f.geometry?.coordinates) return;
       const t = tierFor(f.properties);
       const tau = f.properties?.tau ?? 0;
       const isNow = i === 0;

@@ -131,13 +131,18 @@ async function boot() {
   const firewxLayer = createFireWxLayer(map);
 
   // NHC tropical outlook — only airs when the Atlantic has a development area.
-  const tropicalSource = createTropicalSource();
+  // onChange fires when a new/changed development area appears — rebuild the
+  // idle rotation promptly instead of waiting for the current lap to wrap.
+  // (director is defined below; the callback only runs on a later poll.)
+  const tropicalSource = createTropicalSource(() => director.refreshIdlePlan());
   if (!visualTest) tropicalSource.start();
   const tropicalLayer = createTropicalLayer(map);
 
   // NHC active-storm tracking (forecast track + cone) — only airs once a
   // disturbance actually gets a number, the follow-up to the outlook above.
-  const tropicalStormSource = createTropicalStormSource();
+  // onChange fires when a system is newly named or changes classification —
+  // fold it into the idle rotation within a stop rather than a full lap later.
+  const tropicalStormSource = createTropicalStormSource(() => director.refreshIdlePlan());
   if (!visualTest) tropicalStormSource.start();
   const tropicalStormLayer = createTropicalStormLayer(map);
 

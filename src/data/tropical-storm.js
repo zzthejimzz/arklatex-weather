@@ -59,8 +59,22 @@ async function fetchSlot(base) {
   }
 }
 
-export function createTropicalStormSource() {
+// A newly named system (or one that strengthened, e.g. TD→TS→HU) changes what
+// the idle rotation should include. The plan is otherwise only rebuilt when a
+// lap wraps, so without this signal a fresh Gulf storm can wait a full lap
+// (~10+ min) for its first shot. Signature is the storm names + classification;
+// a bare position drift doesn't retrigger, but a storm that already exists is
+// already in the rotation, so that's fine.
+function signature(storms) {
+  return storms
+    .map(s => `${s.points[0]?.properties?.stormname}/${s.points[0]?.properties?.stormtype}`)
+    .sort()
+    .join('|');
+}
+
+export function createTropicalStormSource(onChange) {
   let storms = [];
+  let sig = '';
 
   async function poll() {
     let delay = REFRESH_MS;
@@ -71,6 +85,8 @@ export function createTropicalStormSource() {
       if (!storms.length) delay = RETRY_MS;
     } else {
       storms = results.filter(r => r.storm).map(r => r.storm);
+      const next = signature(storms);
+      if (next !== sig) { sig = next; onChange?.(); }
     }
     setTimeout(poll, delay);
   }

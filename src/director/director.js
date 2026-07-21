@@ -148,6 +148,17 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     }
   }
 
+  // A tropical feed changed what the idle rotation should include (a newly
+  // named storm, a fresh development area). Force a plan rebuild at the next
+  // idle stop instead of waiting up to a full lap for the current plan to wrap.
+  // The current shot isn't cut — no jarring on-air jump — so a Gulf storm folds
+  // into the rotation within one stop (~15-25 s). A no-op while warnings own the
+  // rotation: the idle plan isn't in use then, and it's rebuilt fresh when
+  // warnings clear regardless.
+  function refreshIdlePlan() {
+    idleIdx = idlePlan.length;
+  }
+
   function advance() {
     // 1. New warnings pre-empt everything. Announce-only alerts (CONSIDERABLE
     //    flash flood warnings) get this one tour framed wide, then fall back
@@ -1030,5 +1041,5 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     }, 1000);
   }
 
-  return { onAlerts, boot };
+  return { onAlerts, boot, refreshIdlePlan };
 }
