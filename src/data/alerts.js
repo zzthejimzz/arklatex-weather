@@ -58,10 +58,50 @@ export function alertInRegion(feature, geo) {
   return false;
 }
 
+// Stable identity for an alert: its VTEC event (office+phenomenon+significance+
+// ETN), falling back to the CAP id when a product carries no VTEC.
+export function alertKey(feature) {
+  const vtec = parseVtec(feature.properties);
+  return vtec ? `${vtec.office}.${vtec.phen}.${vtec.sig}.${vtec.etn}`
+              : (feature.properties?.id ?? feature.id);
+}
+
+// One VTEC event can arrive as several CAP features, each covering a *different*
+// batch of UGC zones — SHV routinely issues a single heat warning as two
+// segments (e.g. XH.W.0002 came as a Shreveport-core batch and an eastern-
+// parishes batch on the same minute). They share one key, so keeping just one
+// feature per key drops every segment but one and punches holes in the warning
+// on the map. Merge same-key features into one alert whose footprint is the
+// union of all their zones. (A genuine original+update pair for the same segment
+// also shares the key; unioning its identical zones is a no-op, and we still
+// take the newest message's props for the headline and timing.)
+export function mergeSameKey(features) {
+  const base = features.reduce((a, b) =>
+    new Date(b.properties?.sent ?? 0) > new Date(a.properties?.sent ?? 0) ? b : a);
+  if (features.length === 1) return base;
+
+  const ugc = [...new Set(features.flatMap(f => f.properties?.geocode?.UGC ?? []))];
+  // Union polygons only when every segment ships one; if any segment is zone-
+  // only (the common heat/winter case) leave geometry null so enrichAlert
+  // rebuilds the whole footprint from the merged UGC list.
+  const geometry = features.every(f => f.geometry)
+    ? {
+        type: 'MultiPolygon',
+        coordinates: features.flatMap(f =>
+          f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates),
+      }
+    : null;
+
+  return {
+    ...base,
+    geometry,
+    properties: { ...base.properties, geocode: { ...base.properties?.geocode, UGC: ugc } },
+  };
+}
+
 export function enrichAlert(feature, geo) {
   const props = feature.properties;
-  const vtec = parseVtec(props);
-  const key = vtec ? `${vtec.office}.${vtec.phen}.${vtec.sig}.${vtec.etn}` : (props.id ?? feature.id);
+  const key = alertKey(feature);
 
   const geometry = feature.geometry ?? geometryFromUgc(props, geo);
   const bounds = geometry ? geometryBounds(geometry) : null;
@@ -106,17 +146,21 @@ export function createLiveSource(geo) {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
 
-          // The feed can briefly list an original and its update side by side;
-          // both map to one VTEC key, and downstream keys layers/plans by it —
-          // keep only the newest message per key.
-          const byKey = new Map();
+          // Group every in-region feature by VTEC key, then collapse each group
+          // to one alert. This folds an original + its update (same segment) and,
+          // crucially, the multiple zone segments of one event into a single
+          // alert covering the union of their zones — downstream layers/plans key
+          // by VTEC and expect one entry per event.
+          const groups = new Map();
           for (const f of data.features ?? []) {
             if (!notExpired(f) || eventEnded(f.properties) || !alertInRegion(f, geo)) continue;
-            const a = enrichAlert(f, geo);
-            const prev = byKey.get(a.key);
-            if (!prev || new Date(a.props.sent) > new Date(prev.props.sent)) byKey.set(a.key, a);
+            const k = alertKey(f);
+            const g = groups.get(k);
+            if (g) g.push(f); else groups.set(k, [f]);
           }
-          const alerts = [...byKey.values()].sort((a, b) => b.score - a.score);
+          const alerts = [...groups.values()]
+            .map(fs => enrichAlert(mergeSameKey(fs), geo))
+            .sort((a, b) => b.score - a.score);
 
           // Suppress "new" on the very first poll — booting into an active day
           // shouldn't fire a tour for every pre-existing warning at once.
