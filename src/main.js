@@ -7,6 +7,7 @@ import { createVelocityLayer } from './map/velocity-layer.js';
 import { createOutlookLayer } from './map/outlook-layer.js';
 import { createAlertsLayer } from './map/alerts-layer.js';
 import { createReportsLayer } from './map/reports-layer.js';
+import { createPrecipFocusLayer } from './map/precip-focus.js';
 import { createMcdLayer } from './map/mcd-layer.js';
 import { createTempsLayer } from './map/temps-layer.js';
 import { createSatelliteLayer } from './map/satellite-layer.js';
@@ -196,6 +197,7 @@ async function boot() {
   // Local Storm Reports (ground truth pins + director tour stops). Live only —
   // current real-world reports would be incongruent over a replayed outbreak.
   const reportsLayer = createReportsLayer(map);
+  const precipFocusLayer = createPrecipFocusLayer(map);
   let latestReports = [];
   if (!replayName && !visualTest) {
     createReportsSource(geo).start(({ reports, added }) => {
@@ -229,7 +231,7 @@ async function boot() {
   const regionBounds = L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(0.04);
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
-    radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
+    radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
     velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
     eroLayer, eroFeed: eroSource,
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,

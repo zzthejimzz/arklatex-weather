@@ -513,6 +513,37 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   to   { transform: scale(1); }
 }
 
+/* ─── Precip tracking focus ─────────────────────────────────────────── */
+/* Labeled dot + sonar ring on the town named in the "Tracking precipitation
+   near X" chip. Same ring language as a visited storm report, but anchored on
+   the reference town (cyan, to read as precip rather than a report). The dot
+   sits exactly on the town lat/lon; the name rides to its upper-right like a
+   city label. */
+.precip-focus-marker { background: none; border: none; }
+.precip-focus { position: absolute; width: 0; height: 0; }
+.pf-dot {
+  position: absolute; left: -6px; top: -6px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #7fd4ff;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 12px #7fd4ff;
+}
+.pf-dot::before, .pf-dot::after {
+  content: '';
+  position: absolute; inset: -4px;
+  border-radius: 50%;
+  border: 3px solid #7fd4ff;
+  animation: lsrPulse 2s ease-out infinite;
+  pointer-events: none;
+}
+.pf-dot::after { animation-delay: 1s; }
+.pf-name {
+  position: absolute; left: 10px; top: -9px;
+  color: #f4f7fd; font-size: 14px; font-weight: 700;
+  white-space: nowrap;
+  text-shadow: 0 0 4px #000, 0 0 7px #000, 1px 1px 2px #000;
+}
+
 /* ─── River gauge pins ──────────────────────────────────────────────── */
 /* Emoji pin ringed in the flood-category color. The gauge driving the shot
    (the one named in the chip text) gets the same sonar-ring treatment as a

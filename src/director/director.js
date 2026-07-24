@@ -94,7 +94,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -443,6 +443,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   function runIdleStep(step) {
     resetRadarMode();
     if (step.type !== 'report') reportsLayer?.highlight(null);
+    if (step.type !== 'poi') precipFocusLayer?.hide();
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
     if (step.type !== 'temps' && step.type !== 'feels') tempsLayer?.hide();
     if (step.type !== 'river') riverLayer?.hide();
@@ -868,6 +869,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         alertsLayer.highlight(null);
         forecastPanel?.hide();
         outlookLayer.show('day1');
+        precipFocusLayer?.show(step.poi.place);
         showChip(`${icon('radar')} Tracking precipitation<span class="sub">${step.poi.placeLabel}</span>`);
         fly(L.latLngBounds(boundsToLeaflet(step.poi.bounds)).pad(0.15), POI_MAX_ZOOM);
         dwellUntil = Date.now() + FLY_MS + step.dwell;

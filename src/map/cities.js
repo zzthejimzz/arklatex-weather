@@ -143,11 +143,13 @@ export function addCityLabels(map) {
 const MI_PER_DEG_LAT = 69.05;
 const NEAR_MI = 6; // beyond this, "near X" overstates — switch to distance + direction
 
-// Names a point for on-air captions. Returns "near Winnfield" only when the
-// point is genuinely close to the town; otherwise "14 mi NW of Winnfield",
-// so the chip never claims precip is at a town it isn't. The returned string
-// includes the relation word — callers should not prepend "near".
-export function nearestPlaceLabel(lat, lon) {
+// Names a point for on-air captions. Returns the nearest in-region town plus
+// a relation label: "near Winnfield" only when the point is genuinely close,
+// otherwise "14 mi NW of Winnfield", so a caption never claims precip is at a
+// town it isn't. `name`/`lat`/`lon` are the TOWN's (not the queried point's),
+// so callers can drop a marker on the named town. `label` includes the
+// relation word — callers should not prepend "near".
+export function nearestPlace(lat, lon) {
   const cosLat = Math.cos((lat * Math.PI) / 180);
   let best = null;
   let bestMi = Infinity;
@@ -163,10 +165,20 @@ export function nearestPlaceLabel(lat, lon) {
     }
   }
   const [name, plat, plon] = best;
-  if (bestMi <= NEAR_MI) return `near ${name}`;
-  const bearing = (Math.atan2((lon - plon) * cosLat, lat - plat) * 180) / Math.PI;
-  const dir = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][
-    Math.round(((bearing + 360) % 360) / 45) % 8
-  ];
-  return `${Math.round(bestMi)} mi ${dir} of ${name}`;
+  let label;
+  if (bestMi <= NEAR_MI) {
+    label = `near ${name}`;
+  } else {
+    const bearing = (Math.atan2((lon - plon) * cosLat, lat - plat) * 180) / Math.PI;
+    const dir = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][
+      Math.round(((bearing + 360) % 360) / 45) % 8
+    ];
+    label = `${Math.round(bestMi)} mi ${dir} of ${name}`;
+  }
+  return { name, lat: plat, lon: plon, label };
+}
+
+// Convenience for callers that only need the caption string.
+export function nearestPlaceLabel(lat, lon) {
+  return nearestPlace(lat, lon).label;
 }
