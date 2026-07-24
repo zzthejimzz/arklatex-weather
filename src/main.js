@@ -296,12 +296,11 @@ async function boot() {
     }, 500);
   } else if (params.has('vel')) {
     // Dev-only: park near the warning-sized default view with the velocity
-    // overlay up — checks velocity tiles + dimmed reflectivity without a live
-    // warning. ?vel=lat,lon picks the nearest radar to that point.
+    // overlay up — checks the velocity loop + reflectivity handoff without a
+    // live warning. ?vel=lat,lon picks the nearest radar to that point.
     const [vlat, vlon] = (params.get('vel') || '32.45,-93.84').split(',').map(Number);
     map.setView([vlat, vlon], 9.5);
-    velocityLayer.show(vlat, vlon);
-    radar.setDim(true);
+    velocityLayer.show(vlat, vlon, () => radar.setHidden(true));
   } else if (params.has('temps')) {
     // Dev-only: park wide with the current-temps chips as soon as obs arrive.
     map.fitBounds(regionBounds);

@@ -254,11 +254,8 @@ export function createRadarLoop(map, { lowPower = false } = {}) {
   );
 
   let idx = frames.length - 1;
-  // Velocity mode dims the loop to a faint underlay instead of hiding it: the
-  // couplets read clearly on top, and if velocity tiles ever fail the shot
-  // still shows storms rather than an empty basemap. Rainfall-totals mode
-  // hides it outright — live echoes animating over accumulated totals is two
-  // precip palettes fighting.
+  // Overlay modes can dim or hide the loop. Velocity and rainfall wait until
+  // their own tiles are ready before hiding it, preventing a blank handoff.
   let level = 1;
   let dimmed = false;
   let hidden = false;

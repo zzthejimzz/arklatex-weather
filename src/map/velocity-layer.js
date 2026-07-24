@@ -1,50 +1,63 @@
-// Single-site base velocity (N0U) from IEM's RIDGE tile cache — the "is it
-// rotating?" view. Shown only while the director holds on a tornado / severe
-// thunderstorm warning; the reflectivity loop fades out underneath it.
+// Single-site storm-relative velocity (N0S) from IEM's RIDGE archive — the
+// "is it rotating?" view. Shown only while the director holds on a tornado /
+// severe thunderstorm warning; reflectivity is hidden once velocity is ready.
 //
 // Velocity is radial, so it only reads near the transmitting radar: each shot
-// picks the WSR-88D closest to the warning centroid. Tiles carry the standard
-// NWS palette (green = toward the radar, red = away; a tight red/green couplet
-// is rotation). Unlike n0q there is no published index→value table for these
-// tiles, so no data-space smoothing — a light CSS blur on the pane melts the
-// raw RIDGE blocks enough for broadcast without inventing data. The stock
-// RIDGE palette is dark and desaturated — at partial opacity over the dimmed
-// reflectivity it read as "faded reflectivity" on stream — so the pane also
-// boosts saturation/brightness/contrast and the tiles run fully opaque.
+// picks the WSR-88D closest to the warning centroid. Storm-relative velocity
+// removes the estimated storm motion, making compact inbound/outbound couplets
+// easier to see than in base velocity. Tiles carry the standard NWS palette
+// (green = toward the radar, red = away).
 //
-// Animation: unlike the n0q mosaic, IEM's RIDGE tile cache has no real
-// time-lag history for single-site products — every "-m05m".."-m90m" suffix
-// on a ridge:: URL comes back byte-identical (verified by hash), while only
-// the bare (current) URL is live. There's no server-side loop to draw from,
-// so this builds its own: a ring of frames, refreshed one at a time on a
-// timer, swept oldest → newest with the same crossfade/hold pacing as the
-// reflectivity loop. Freshly shown, all frames are the same current snapshot
-// (nothing to animate yet); real motion appears over the next few refresh
-// cycles as each slot gets overwritten with an actual later scan.
+// IEM no longer publishes a live N0U product for these sites (the apparent
+// "current" N0U tiles are years old). N0S is current, and IEM exposes the real
+// archived scan times through /json/radar.py. Fetching those timestamps when a
+// warning shot starts gives us a genuine loop immediately instead of trying to
+// accumulate history in memory over several minutes.
 import { safeTmsLayer } from './tms-tile.js';
 
-// WSR-88Ds covering the ArkLaTex and its edges.
+// WSR-88Ds covering the ArkLaTex and its edges. `id` is the familiar station
+// identifier used on air; IEM's RIDGE/API routes use the three-letter form.
 const SITES = [
-  { id: 'KSHV', name: 'Shreveport', lat: 32.4508, lon: -93.8412 },
-  { id: 'KSRX', name: 'Fort Smith', lat: 35.2904, lon: -94.3619 },
-  { id: 'KLZK', name: 'Little Rock', lat: 34.8365, lon: -92.2621 },
-  { id: 'KPOE', name: 'Fort Polk', lat: 31.1556, lon: -92.9762 },
-  { id: 'KFWS', name: 'Dallas/Fort Worth', lat: 32.5730, lon: -97.3031 },
-  { id: 'KDGX', name: 'Jackson', lat: 32.2797, lon: -89.9846 },
+  { id: 'KSHV', iemId: 'SHV', name: 'Shreveport', lat: 32.4508, lon: -93.8412 },
+  { id: 'KSRX', iemId: 'SRX', name: 'Fort Smith', lat: 35.2904, lon: -94.3619 },
+  { id: 'KLZK', iemId: 'LZK', name: 'Little Rock', lat: 34.8365, lon: -92.2621 },
+  { id: 'KPOE', iemId: 'POE', name: 'Fort Polk', lat: 31.1556, lon: -92.9762 },
+  { id: 'KFWS', iemId: 'FWS', name: 'Dallas/Fort Worth', lat: 32.5730, lon: -97.3031 },
+  { id: 'KDGX', iemId: 'DGX', name: 'Jackson', lat: 32.2797, lon: -89.9846 },
 ];
 
-const url = (site, ts) =>
-  `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::${site}-N0U-0/{z}/{x}/{y}.png?_ts=${ts}`;
-// New volume scan roughly every 4–6 min in precip mode; snapshot well inside
-// that so a fresh scan is picked up promptly. Doubles as the loop's history
-// cadence: FRAME_COUNT * SNAPSHOT_MS is how far back the built-up loop reaches.
-const SNAPSHOT_MS = 2 * 60 * 1000;
-const FRAME_COUNT = 6; // ~12 min of history once fully built up
-const FRAME_MS = 650; // sweep pace, oldest → newest
+const PRODUCT = 'N0S';
+const LOOKBACK_MS = 45 * 60 * 1000;
+const FRAME_COUNT = 6;
+const FRAME_MS = 650;
 const HOLD_NEWEST_MS = 2200;
 const XFADE_MS = 240;
 const MAX_ZOOM = 14;
-const OPACITY = 1; // partial opacity let reflectivity greens bleed through and muddy the couplets
+const OPACITY = 1;
+
+const tileUrl = (site, stamp) =>
+  `https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/ridge::${site.iemId}-${PRODUCT}-${stamp}/{z}/{x}/{y}.png`;
+
+function archiveStamp(ts) {
+  return ts.replace(/\D/g, '').slice(0, 12);
+}
+
+async function recentScans(site, signal) {
+  const end = new Date();
+  const start = new Date(end.getTime() - LOOKBACK_MS);
+  const params = new URLSearchParams({
+    operation: 'list',
+    product: PRODUCT,
+    radar: site.iemId,
+    start: start.toISOString(),
+    end: end.toISOString(),
+  });
+  const res = await fetch(`https://mesonet.agron.iastate.edu/json/radar.py?${params}`, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const stamps = [...new Set((data.scans ?? []).map(scan => archiveStamp(scan.ts)).filter(Boolean))];
+  return stamps.slice(-FRAME_COUNT);
+}
 
 export function nearestSite(lat, lon) {
   let best = SITES[0];
@@ -62,83 +75,108 @@ export function createVelocityLayer(map) {
   const pane = map.getPane('velocity');
   pane.style.zIndex = 452;
   pane.style.pointerEvents = 'none';
-  // Blur melts RIDGE pixel blocks at broadcast distance; the color boost
-  // turns the dark stock palette into TV-bright red/green so rotation pops.
-  pane.style.filter = 'blur(1.5px) saturate(2.2) brightness(1.2) contrast(1.2)';
+  // N0S has a cleaner, brighter palette than the retired N0U feed. A modest
+  // broadcast boost and one-pixel blur keep couplets vivid without allowing
+  // the grey zero-velocity field to wash out roads and warning outlines.
+  pane.style.filter = 'blur(1px) saturate(1.8) brightness(1.18) contrast(1.3)';
 
   // No health beat here: velocity is an occasional overlay, silent for hours
-  // on quiet days — registering it would just feed the watchdog false alarms.
-  // If tiles fail, the shot still has the dimmed reflectivity underneath.
-  let order = []; // ring buffer, oldest → newest, mutated in place by rotation
-  let current = null; // the frame currently faded in (or fading in)
+  // on quiet days — registering it would feed the watchdog false alarms.
+  let frames = [];
+  let idx = -1;
   let site = null;
   let cycleTimer = null;
-  let lastSnapshotAt = 0;
+  let request = null;
+  let generation = 0;
 
-  function makeFrame(s, ts) {
-    return safeTmsLayer(url(s.id, ts), {
+  function makeFrame(s, stamp) {
+    return safeTmsLayer(tileUrl(s, stamp), {
       pane: 'velocity',
       opacity: 0,
       maxZoom: MAX_ZOOM,
       updateWhenIdle: false,
       keepBuffer: 2,
       crossOrigin: 'anonymous',
-    }).addTo(map);
+    });
   }
 
   // Crossfade the visible frame — a hard cut reads as flicker on stream.
-  function fadeTo(next) {
-    const from = current;
-    current = next;
+  function fadeTo(nextIdx) {
+    if (!frames[nextIdx]) return;
+    const from = frames[idx];
+    const to = frames[nextIdx];
+    idx = nextIdx;
     const t0 = performance.now();
     const step = (now) => {
       const t = Math.min(1, (now - t0) / XFADE_MS);
-      next.setOpacity(OPACITY * t);
-      if (from) from.setOpacity(OPACITY * (1 - t));
-      if (t < 1 && current === next) requestAnimationFrame(step);
+      to.setOpacity(OPACITY * t);
+      if (from && from !== to) from.setOpacity(OPACITY * (1 - t));
+      if (t < 1 && frames[idx] === to) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   }
 
-  function show(atLat, atLon) {
-    const s = nearestSite(atLat, atLon);
-    if (order.length && site?.id === s.id) return s; // already up for this radar, keep its built-up history
-    hide();
-    site = s;
-    const ts = Date.now();
-    order = Array.from({ length: FRAME_COUNT }, () => makeFrame(s, ts));
-    lastSnapshotAt = ts;
-
-    // Fade in over the (already fading) reflectivity — reads as a crossfade.
-    fadeTo(order[order.length - 1]);
-
+  function startLoop() {
+    if (frames.length < 2) return;
     let nextAt = Date.now() + HOLD_NEWEST_MS;
     cycleTimer = setInterval(() => {
-      const i = order.indexOf(current);
-      const atNewest = i === order.length - 1;
-      // Only safe to repurpose the oldest frame while holding on newest —
-      // that's the one point in the sweep where the oldest slot is guaranteed
-      // off-screen, so overwriting its URL can't flash a mid-load blank tile.
-      if (atNewest && Date.now() - lastSnapshotAt >= SNAPSHOT_MS) {
-        const oldest = order.shift();
-        oldest.setUrl(url(s.id, Date.now()));
-        order.push(oldest);
-        lastSnapshotAt = Date.now();
-      }
       if (Date.now() < nextAt) return;
-      const ni = (order.indexOf(current) + 1) % order.length;
-      fadeTo(order[ni]);
-      nextAt = Date.now() + (ni === order.length - 1 ? HOLD_NEWEST_MS : FRAME_MS);
+      const nextIdx = (idx + 1) % frames.length;
+      fadeTo(nextIdx);
+      nextAt = Date.now() + (nextIdx === frames.length - 1 ? HOLD_NEWEST_MS : FRAME_MS);
     }, 100);
+  }
+
+  async function load(s, token, onReady) {
+    let stamps;
+    try {
+      stamps = await recentScans(s, request.signal);
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      console.warn(`[velocity] ${s.id} archive lookup failed, using latest image:`, err);
+      stamps = [];
+    }
+    if (token !== generation || site?.id !== s.id) return;
+
+    // `0` is IEM's latest-image alias and is the graceful fallback when archive
+    // metadata is temporarily unavailable or the radar has not emitted N0S
+    // during the lookback window.
+    const sources = stamps.length ? stamps : ['0'];
+    frames = sources.map(stamp => makeFrame(s, stamp));
+    idx = frames.length - 1;
+    const newest = frames[idx];
+
+    let readyCalled = false;
+    const ready = () => {
+      if (readyCalled || token !== generation || !frames.includes(newest)) return;
+      readyCalled = true;
+      onReady?.();
+      startLoop();
+    };
+    newest.once('load', ready);
+    frames.forEach(frame => frame.addTo(map));
+    fadeTo(idx);
+  }
+
+  function show(atLat, atLon, onReady) {
+    const s = nearestSite(atLat, atLon);
+    hide();
+    site = s;
+    const token = generation;
+    request = new AbortController();
+    load(s, token, onReady);
     return s;
   }
 
   function hide() {
+    generation++;
+    request?.abort();
+    request = null;
     if (cycleTimer) clearInterval(cycleTimer);
     cycleTimer = null;
-    order.forEach((l) => map.removeLayer(l));
-    order = [];
-    current = null;
+    frames.forEach(frame => map.removeLayer(frame));
+    frames = [];
+    idx = -1;
     site = null;
   }
 

@@ -81,7 +81,8 @@ const HEAT_WARNING_DWELL_MS = 16_000;
 
 // Storm-scale warnings get a two-act shot: reflectivity while the camera
 // settles, then a switch to single-site base velocity for the back half of the
-// dwell — the "is it rotating?" look. Reflectivity stays dimmed underneath.
+// dwell — the "is it rotating?" look. Reflectivity stays visible until the
+// velocity tiles load, then hides for the remainder of the warning shot.
 const VELOCITY_EVENTS = new Set(['tornado warning', 'severe thunderstorm warning']);
 const VELOCITY_AT = 0.45; // fraction of the dwell spent on reflectivity first
 
@@ -998,10 +999,13 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       velTimer = setTimeout(() => {
         velTimer = null;
         if (touring?.key !== alert.key) return;
-        const site = velocityLayer.show((s + n) / 2, (w + e) / 2);
+        const site = velocityLayer.show(
+          (s + n) / 2,
+          (w + e) / 2,
+          () => radar?.setHidden(true),
+        );
         if (!site) return;
-        radar?.setDim(true);
-        showChip(`${icon('hurricane')} Storm Velocity — ${site.id} ${site.name}<span class="sub">green: toward radar · red: away · tight couplet = rotation</span>`);
+        showChip(`${icon('hurricane')} Storm-Relative Velocity — ${site.id} ${site.name}<span class="sub">green: toward radar · red: away · tight couplet = rotation</span>`);
       }, FLY_MS + dwell * VELOCITY_AT);
     }
   }

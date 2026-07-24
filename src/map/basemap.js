@@ -14,7 +14,7 @@
 //   satellite 440     GOES vis/IR/WV imagery (satellite map mode only)
 //   radar 450         NEXRAD loop frames (normal blend over the grey base)
 //   rainfall 451      MRMS precip totals (rainfall map mode only)
-//   velocity 452      single-site base velocity (warning shots only)
+//   velocity 452      single-site storm-relative velocity (warning shots only)
 //   states 455        white state borders
 //   mcd 458           mesoscale discussions (dashed)
 //   watches 460       watch outlines
