@@ -237,14 +237,20 @@ export async function addVectorBasemap(map) {
     : type === 'fill' ? ['fill-opacity']
     : [];
 
-  // Every layer dropped during a move and faded back on settle: all labels,
-  // plus the heavy base geometry (roads/landuse/aeroway).
+  // Every layer dropped during a move and faded back on settle: all labels
+  // (isLabel — these can also be suppressed for a whole shot, see below), plus
+  // the heavy base geometry (roads/landuse/aeroway).
   const motionLayers = [
-    ...labelsStyle.layers.map(l => ({ gl: glLabels, id: l.id, props: opacityProps(l.type) })),
+    ...labelsStyle.layers.map(l => ({ gl: glLabels, id: l.id, props: opacityProps(l.type), isLabel: true })),
     ...baseStyle.layers
       .filter(l => HEAVY_BASE.test(l.id))
-      .map(l => ({ gl: glBase, id: l.id, props: opacityProps(l.type) })),
+      .map(l => ({ gl: glBase, id: l.id, props: opacityProps(l.type), isLabel: false })),
   ].filter(s => s.props.length);
+
+  // When true, basemap labels stay hidden even after the camera settles — the
+  // precip-tracking shot wants a clean map with only its own ringed town label,
+  // not a duplicate GL name underneath. Base geometry still restores as usual.
+  let labelsSuppressed = false;
 
   // Hide outright during the flight (visibility:none skips the layer entirely,
   // so it costs nothing per frame). setLayoutProperty throws before the style
@@ -257,24 +263,55 @@ export async function addVectorBasemap(map) {
 
   // On settle, reveal at opacity 0 then ramp to 1 — the baked -transition turns
   // that into a fade, so the one-time populate reads as a reveal, not a pop.
+  // Suppressed labels are left hidden.
   const showOnSettle = () => {
     for (const s of motionLayers) {
-      if (!s.gl.isStyleLoaded()) continue;
+      if (!s.gl.isStyleLoaded() || (s.isLabel && labelsSuppressed)) continue;
       for (const p of s.props) s.gl.setPaintProperty(s.id, p, 0); // instant: still hidden
       s.gl.setLayoutProperty(s.id, 'visibility', 'visible');
     }
     requestAnimationFrame(() => {
       for (const s of motionLayers) {
-        if (!s.gl.isStyleLoaded()) continue;
+        if (!s.gl.isStyleLoaded() || (s.isLabel && labelsSuppressed)) continue;
         for (const p of s.props) s.gl.setPaintProperty(s.id, p, 1); // ramps via -transition
       }
     });
   };
+
+  // Director-driven per-shot label suppression. Applies immediately if the
+  // camera is already settled; if a move is in flight, showOnSettle honors the
+  // flag on landing either way.
+  // Guard on layer existence, not isStyleLoaded(): on a live map glyphs/tiles
+  // keep streaming, so isStyleLoaded() reports false long after the layers are
+  // registered and mutable — gating on it would skip the suppression entirely.
+  const setLabelsHidden = (on) => {
+    if (on === labelsSuppressed) return;
+    labelsSuppressed = on;
+    for (const s of motionLayers) {
+      if (!s.isLabel || !s.gl.getLayer(s.id)) continue;
+      if (on) {
+        s.gl.setLayoutProperty(s.id, 'visibility', 'none');
+      } else {
+        for (const p of s.props) s.gl.setPaintProperty(s.id, p, 0);
+        s.gl.setLayoutProperty(s.id, 'visibility', 'visible');
+      }
+    }
+    if (!on) {
+      requestAnimationFrame(() => {
+        for (const s of motionLayers) {
+          if (!s.isLabel || !s.gl.getLayer(s.id)) continue;
+          for (const p of s.props) s.gl.setPaintProperty(s.id, p, 1);
+        }
+      });
+    }
+  };
+  // Reachable by anything holding the map (the director toggles it per shot).
+  map.setBasemapLabelsHidden = setLabelsHidden;
 
   // A Leaflet zoom also emits movestart/moveend. Listening to both lifecycle
   // pairs hid every layer twice and ran the settle/fade property loop twice.
   map.on('movestart', hideForMove);
   map.on('moveend', showOnSettle);
 
-  return { base, labels };
+  return { base, labels, setLabelsHidden };
 }

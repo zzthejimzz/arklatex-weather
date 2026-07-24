@@ -434,6 +434,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     firewxLayer?.hide();
     tropicalLayer?.hide();
     tropicalStormLayer?.hide();
+    // Precip-shot extras: the ringed town marker and the GL-label suppression
+    // it turns on. Cleared here so any shot that preempts the precip stop
+    // (a live warning, a report) lands with the normal named basemap.
+    precipFocusLayer?.hide();
+    map.setBasemapLabelsHidden?.(false);
     if (outlookHidden) {
       outlookHidden = false;
       outlookLayer.show('day1');
@@ -443,7 +448,6 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   function runIdleStep(step) {
     resetRadarMode();
     if (step.type !== 'report') reportsLayer?.highlight(null);
-    if (step.type !== 'poi') precipFocusLayer?.hide();
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
     if (step.type !== 'temps' && step.type !== 'feels') tempsLayer?.hide();
     if (step.type !== 'river') riverLayer?.hide();
@@ -869,6 +873,9 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         alertsLayer.highlight(null);
         forecastPanel?.hide();
         outlookLayer.show('day1');
+        // Clean map for the precip shot: hide the GL city names so the only
+        // label on air is our own ringed town (avoids a duplicate name).
+        map.setBasemapLabelsHidden?.(true);
         precipFocusLayer?.show(step.poi.place);
         showChip(`${icon('radar')} Tracking precipitation<span class="sub">${step.poi.placeLabel}</span>`);
         fly(L.latLngBounds(boundsToLeaflet(step.poi.bounds)).pad(0.15), POI_MAX_ZOOM);
