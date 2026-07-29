@@ -130,9 +130,12 @@ mpv --no-video --no-terminal --really-quiet \
 # 6 Mbps x264, 2-second keyframes (YouTube's ask). Video is the raw screen
 # grab (the banner visualizer is part of the page); audio is the mpv sink
 # monitor with MUSIC_VOLUME applied.
+# thread_queue_size: with two live inputs (screen + audio), a CPU spike on a
+# camera fly can back up an input queue; the default (8) is too small and drops
+# frames / drifts A/V. Give both inputs generous buffers.
 "${CPU_PIN_FFMPEG[@]}" ffmpeg -loglevel warning \
-  -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_NUM" \
-  -f pulse -i music.monitor \
+  -f x11grab -thread_queue_size 1024 -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_NUM" \
+  -f pulse -thread_queue_size 1024 -i music.monitor \
   -map 0:v -map 1:a \
   -af "volume=${MUSIC_VOLUME}" \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
