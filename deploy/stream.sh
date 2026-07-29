@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # The broadcast pipeline: virtual display → Chromium kiosk rendering the
-# page → ffmpeg screen-grab + looping music → YouTube RTMP.
+# page → ffmpeg screen-grab + shuffled music bed → YouTube RTMP. Music is no
+# longer a single looped file: mpv shuffles a whole folder into a private
+# PulseAudio sink and ffmpeg reads that sink's monitor. mpv also writes the
+# current track title to NOWPLAYING_FILE, which serve.js surfaces to the
+# banner's now-playing widget (the visualizer lives in the page now, so the
+# screen-grab captures it for free — no ffmpeg filtergraph needed).
 # Invoked by arklatex-stream.service; if ANY stage dies the script exits and
 # systemd restarts the whole chain (state is only ever in the page, which
 # rebuilds itself from live APIs in seconds).
 #
 # Required env (from /etc/arklatex.env):
 #   YOUTUBE_STREAM_KEY  from studio.youtube.com → Go Live → Stream settings
-#   MUSIC_FILE          absolute path to the royalty-free loop (mp3/m4a)
 # Optional env:
+#   MUSIC_DIR           folder of royalty-free tracks to shuffle
+#                        (mp3/m4a/ogg/flac). Default /var/lib/arklatex/music.
+#                        Add/remove files any time — mpv reshuffles on each
+#                        loop, no stream restart needed.
 #   MUSIC_VOLUME        linear gain multiplier for the music bed (default 0.4,
 #                        i.e. -8 dB) — OBS's volume slider has no equivalent
 #                        here, so this is that control. 1.0 = file's native
@@ -23,8 +31,11 @@ FPS=30
 # keeps the 2× supersampled tiles for visual review.
 PAGE_URL="http://127.0.0.1:8080/?vps"
 RTMP="rtmp://a.rtmp.youtube.com/live2/${YOUTUBE_STREAM_KEY:?set in /etc/arklatex.env}"
-: "${MUSIC_FILE:?set in /etc/arklatex.env}"
+: "${MUSIC_DIR:=/var/lib/arklatex/music}"
 : "${MUSIC_VOLUME:=0.4}"
+# Where mpv writes the current track title; serve.js reads the same path.
+: "${NOWPLAYING_FILE:=/var/lib/arklatex/music/.nowplaying}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cleanup() { kill 0 2>/dev/null || true; }
 trap cleanup EXIT
@@ -88,10 +99,40 @@ DISPLAY=$DISPLAY_NUM "${CPU_PIN_CHROME[@]}" chromium \
 
 sleep 8  # let the page boot before frames start flowing
 
-# 6 Mbps x264, 2-second keyframes (YouTube's ask), music loops forever.
+# ── Music: a private PulseAudio sink fed by a shuffled mpv playlist ──────
+# A throwaway PulseAudio instance (no system session needed) exposes one
+# null sink; mpv decodes the whole folder into it, shuffled and looping
+# forever; ffmpeg taps the sink's monitor. Decoupling playback from the
+# encoder is what buys gapless shuffle, reshuffle-per-loop, and a live-
+# editable folder — none of which -stream_loop on a single file could do.
+export XDG_RUNTIME_DIR=/tmp/arklatex-pulse
+mkdir -p "$XDG_RUNTIME_DIR"
+pulseaudio -n --exit-idle-time=-1 \
+  --load="module-native-protocol-unix auth-anonymous=1" \
+  --load="module-null-sink sink_name=music sink_properties=device.description=music" &
+sleep 2  # let the sound server bind its socket
+
+shopt -s nullglob
+MUSIC=("$MUSIC_DIR"/*.mp3 "$MUSIC_DIR"/*.m4a "$MUSIC_DIR"/*.ogg "$MUSIC_DIR"/*.flac)
+shopt -u nullglob
+if [ ${#MUSIC[@]} -eq 0 ]; then
+  echo "[stream] no audio files in $MUSIC_DIR" >&2
+  exit 1
+fi
+echo "[stream] shuffling ${#MUSIC[@]} tracks from $MUSIC_DIR"
+export NOWPLAYING_FILE
+mpv --no-video --no-terminal --really-quiet \
+  --shuffle --loop-playlist=inf \
+  --audio-device=pulse/music \
+  --script="$SCRIPT_DIR/nowplaying.lua" \
+  "${MUSIC[@]}" &
+
+# 6 Mbps x264, 2-second keyframes (YouTube's ask). Video is the raw screen
+# grab (the banner visualizer is part of the page); audio is the mpv sink
+# monitor with MUSIC_VOLUME applied.
 "${CPU_PIN_FFMPEG[@]}" ffmpeg -loglevel warning \
   -f x11grab -framerate "$FPS" -video_size "$SIZE" -draw_mouse 0 -i "$DISPLAY_NUM" \
-  -stream_loop -1 -i "$MUSIC_FILE" \
+  -f pulse -i music.monitor \
   -map 0:v -map 1:a \
   -af "volume=${MUSIC_VOLUME}" \
   -c:v libx264 -preset ultrafast -pix_fmt yuv420p \

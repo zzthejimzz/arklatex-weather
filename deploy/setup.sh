@@ -10,6 +10,7 @@ DIR=/opt/arklatex
 apt-get update
 apt-get install -y --no-install-recommends \
   chromium xvfb ffmpeg nodejs npm git \
+  mpv pulseaudio pulseaudio-utils \
   fonts-noto-core fonts-noto-color-emoji fonts-inter
 
 id -u arklatex &>/dev/null || useradd -r -m -d /var/lib/arklatex -s /usr/sbin/nologin arklatex
@@ -27,17 +28,17 @@ npm run build
 chmod +x deploy/stream.sh deploy/watchdog.sh
 chown -R arklatex:arklatex "$DIR"
 
-# Env template — fill in the stream key + music path, then start the units.
+# Env template — fill in the stream key, then start the units.
 if [[ ! -f /etc/arklatex.env ]]; then
   cat > /etc/arklatex.env <<'EOF'
 YOUTUBE_STREAM_KEY=paste-key-from-youtube-studio
-MUSIC_FILE=/var/lib/arklatex/music/loop.mp3
-# MUSIC_VOLUME=0.4   # linear gain on the music bed; uncomment to override the default
+# MUSIC_DIR=/var/lib/arklatex/music   # folder of tracks to shuffle (default shown)
+# MUSIC_VOLUME=0.4                     # linear gain on the music bed
 EOF
   chmod 600 /etc/arklatex.env
   mkdir -p /var/lib/arklatex/music
   chown -R arklatex:arklatex /var/lib/arklatex
-  echo ">>> edit /etc/arklatex.env and drop your music loop in /var/lib/arklatex/music/"
+  echo ">>> edit /etc/arklatex.env and drop your mp3s in /var/lib/arklatex/music/ (multiple files = shuffled)"
 fi
 
 cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/

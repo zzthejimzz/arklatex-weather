@@ -1,9 +1,10 @@
 # Phase 2 — streaming the broadcast page to YouTube
 
 The page renders in a headless Chromium on a virtual display; ffmpeg grabs
-that display at 30 fps, mixes a looping music track, and pushes 6 Mbps H.264
-to YouTube's RTMP ingest. systemd keeps every stage alive; a watchdog
-restarts the chain if frames ever stop changing.
+that display at 30 fps, mixes a shuffled music bed (mpv → PulseAudio sink)
+with a waveform overlay, and pushes 6 Mbps H.264 to YouTube's RTMP ingest.
+systemd keeps every stage alive; a watchdog restarts the chain if frames
+ever stop changing.
 
 ```
 VPS ── arklatex-serve.service   node deploy/serve.js (dist + SPC proxy :8080)
@@ -17,9 +18,12 @@ VPS ── arklatex-serve.service   node deploy/serve.js (dist + SPC proxy :8080
   the first time (studio.youtube.com → Create → Go live). Grab the **stream
   key** from Stream settings. Set the stream to *Not made for kids*, disable
   DVR if you like, and note archives cap at 12 hours.
-- **Music**: one long royalty-free loop (mp3), e.g. from the YouTube Audio
-  Library — pick tracks marked safe for monetization and keep a note of the
-  license. Content-ID-claimed music will strike a 24/7 stream fast.
+- **Music**: a folder of royalty-free tracks (mp3/m4a/ogg/flac) that mpv
+  shuffles, e.g. from the YouTube Audio Library — pick tracks marked safe for
+  monetization and keep a note of the license. Content-ID-registered tracks
+  won't strike the stream, but they *will* file automated claims (ads /
+  muting); download each track's Pixabay license certificate to dispute
+  them, or prefer non-Content-ID tracks for a hassle-free 24/7 stream.
 - **VPS**: Hetzner **CPX41** (8 vCPU, ~€29/mo), **Debian 12** image. CPX31
   may work, but WebGL runs in software (SwiftShader) and x264 wants ~3 cores
   by itself — start big, downsize after watching `htop` for a day.
@@ -36,8 +40,8 @@ bash /opt/arklatex/deploy/setup.sh
 Then:
 
 ```bash
-nano /etc/arklatex.env        # paste YOUTUBE_STREAM_KEY, set MUSIC_FILE
-# scp your music loop to /var/lib/arklatex/music/loop.mp3
+nano /etc/arklatex.env        # paste YOUTUBE_STREAM_KEY (MUSIC_DIR optional)
+# scp your tracks into /var/lib/arklatex/music/  (multiple files = shuffled)
 systemctl start arklatex-serve arklatex-stream arklatex-watchdog.timer
 ```
 

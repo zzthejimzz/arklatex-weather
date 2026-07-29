@@ -84,7 +84,8 @@ Common edits:
 - `MUSIC_VOLUME` — linear gain, default `0.4` (`1.0` = file's native level).
   There's no OBS-style fader on the VPS, so this + restart is the whole
   workflow.
-- `MUSIC_FILE` — path under `/var/lib/arklatex/music/`.
+- `MUSIC_DIR` — folder of tracks to shuffle, default `/var/lib/arklatex/music/`.
+  Add/remove mp3s there (no restart needed — mpv reshuffles each loop).
 
 ## 6. Restart everything from scratch
 

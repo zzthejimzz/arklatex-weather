@@ -14,6 +14,11 @@ import { fileURLToPath } from 'node:url';
 const PORT = Number(process.argv[2]) || 8080;
 const DIST = join(fileURLToPath(import.meta.url), '../../dist');
 
+// Current track title, written by mpv (deploy/nowplaying.lua) on the streaming
+// box and surfaced to the banner widget. Keep this path in sync with
+// NOWPLAYING_FILE in deploy/stream.sh.
+const NOWPLAYING_FILE = process.env.NOWPLAYING_FILE || '/var/lib/arklatex/music/.nowplaying';
+
 const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com']);
 
 // Pollen.com's keyless API 403s without a pollen.com Referer + browser
@@ -83,6 +88,19 @@ const server = createServer(async (req, res) => {
 
   if (u.pathname === '/proxy.php') {
     return handleProxy(req, res, u.searchParams.get('url') || '');
+  }
+
+  if (u.pathname === '/nowplaying') {
+    try {
+      const t = await readFile(NOWPLAYING_FILE, 'utf8');
+      res.writeHead(200, {
+        'content-type': 'text/plain; charset=utf-8',
+        'cache-control': 'no-store',
+      }).end(t.trim());
+    } catch {
+      res.writeHead(204).end(); // no file yet (e.g. dev) — widget stays idle
+    }
+    return;
   }
 
   let path = normalize(u.pathname).replace(/^([/\\])+/, '');
