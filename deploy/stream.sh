@@ -15,8 +15,9 @@
 # Optional env:
 #   MUSIC_DIR           folder of royalty-free tracks to shuffle
 #                        (mp3/m4a/ogg/flac). Default /var/lib/arklatex/music.
-#                        Add/remove files any time — mpv reshuffles on each
-#                        loop, no stream restart needed.
+#                        mpv reshuffles on each loop automatically, but reads
+#                        the folder only at launch — after adding/removing
+#                        tracks, `systemctl restart arklatex-stream`.
 #   MUSIC_VOLUME        linear gain multiplier for the music bed (default 0.4,
 #                        i.e. -8 dB) — OBS's volume slider has no equivalent
 #                        here, so this is that control. 1.0 = file's native

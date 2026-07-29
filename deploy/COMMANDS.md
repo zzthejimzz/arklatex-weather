@@ -85,7 +85,8 @@ Common edits:
   There's no OBS-style fader on the VPS, so this + restart is the whole
   workflow.
 - `MUSIC_DIR` — folder of tracks to shuffle, default `/var/lib/arklatex/music/`.
-  Add/remove mp3s there (no restart needed — mpv reshuffles each loop).
+  mpv reshuffles each loop, but reads the folder only at launch — after
+  adding/removing mp3s, `systemctl restart arklatex-stream`.
 
 ## 6. Restart everything from scratch
 
