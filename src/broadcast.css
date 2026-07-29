@@ -497,7 +497,10 @@ html, body {
 }
 @keyframes tickerScroll {
   from { transform: translateX(0); }
-  to   { transform: translateX(calc(-50% - 32px)); } /* content width + half the gap */
+  /* Seam distance (one content width + one full gap) in whole pixels, set by
+     apply() in ticker.js. Pinned to an integer so steps() lands every captured
+     frame on a whole device pixel — no subpixel resample shimmer on the VPS. */
+  to   { transform: translateX(calc(var(--tk-dist, 4000) * -1px)); }
 }
 .ticker-content {
   display: flex; align-items: center; gap: 28px;

@@ -81,9 +81,21 @@ export function createTicker(el, geo, obsFeed, { live = true } = {}) {
     if (!pendingHtml) return;
     contents.forEach(c => { c.innerHTML = pendingHtml; });
     pendingHtml = null;
-    // Constant scroll speed regardless of content length.
-    const w = contents[0].scrollWidth;
-    track.style.animationDuration = `${Math.max(20, Math.round(w / SCROLL_PX_PER_S))}s`;
+    // Constant scroll speed regardless of content length. The seam distance is
+    // one content width + one full gap, in whole pixels — the keyframe's
+    // endpoint (var(--tk-dist)) and the step count are the SAME integer, so the
+    // loop advances in exact 1px increments.
+    const dist = Math.round(contents[0].scrollWidth + 64);
+    track.style.setProperty('--tk-dist', dist);
+    track.style.animationDuration = `${Math.max(20, Math.round(dist / SCROLL_PX_PER_S))}s`;
+    // Quantize motion to whole pixels. Off-box we capture the page with a fixed
+    // 30 fps x11grab whose clock is unsynced to Chrome's paint clock; a linear
+    // (continuous) transform lands on fractional offsets, so the software
+    // compositor resamples the glyphs differently every grabbed frame — read as
+    // shimmer/judder on the stream. Stepping per-pixel makes every captured
+    // frame land on an integer offset (crisp, no resample); at 90 px/s the
+    // ~11 ms steps are imperceptible locally.
+    track.style.animationTimingFunction = `steps(${dist}, end)`;
   }
   track.addEventListener('animationiteration', apply);
 
