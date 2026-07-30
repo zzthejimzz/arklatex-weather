@@ -289,20 +289,25 @@ html, body {
   background: color-mix(in srgb, var(--alert-color, #ef4444) 10%, transparent);
 }
 .banner-alert-badge {
-  flex: 0 0 auto;
-  font-size: 26px; font-weight: 800; letter-spacing: 0.04em;
-  padding: 10px 22px; border-radius: 10px;
+  /* Shrinkable so a long event name gives up width before the countdown does
+     — the meta line has no ellipsis, so if the badge held full width the
+     "expires in H:MM" text would clip under the music widget. */
+  flex: 0 1 auto; min-width: 0;
+  font-size: 23px; font-weight: 800; letter-spacing: 0.04em;
+  padding: 10px 18px; border-radius: 10px;
   color: #fff; text-transform: uppercase;
   background: var(--alert-color, var(--accent-blue));
   box-shadow: 0 0 24px rgba(239, 68, 68, 0.35);
-  white-space: nowrap;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .banner-alert-badge.pulse { animation: badgePulse 1.6s ease infinite; }
 @keyframes badgePulse {
   0%, 100% { filter: brightness(1); }
   50%      { filter: brightness(1.35); }
 }
-.banner-alert-info { min-width: 0; }
+/* Keep the area + countdown at their natural width so the badge (above) is
+   what shrinks under pressure, not the meta line. */
+.banner-alert-info { flex: 0 0 auto; min-width: 0; }
 .banner-alert-area {
   font-size: 24px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
