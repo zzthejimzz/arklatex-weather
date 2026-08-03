@@ -25,7 +25,7 @@ cd "$DIR"
 npm ci
 npm run build
 
-chmod +x deploy/stream.sh deploy/watchdog.sh
+chmod +x deploy/stream.sh deploy/watchdog.sh deploy/yt-live-watchdog.sh
 chown -R arklatex:arklatex "$DIR"
 
 # Env template — fill in the stream key, then start the units.
@@ -43,6 +43,7 @@ fi
 
 cp deploy/systemd/*.service deploy/systemd/*.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable arklatex-serve.service arklatex-stream.service arklatex-watchdog.timer
+systemctl enable arklatex-serve.service arklatex-stream.service \
+  arklatex-watchdog.timer arklatex-yt-live-watchdog.timer
 
-echo ">>> when /etc/arklatex.env is filled in:  systemctl start arklatex-serve arklatex-stream arklatex-watchdog.timer"
+echo ">>> when /etc/arklatex.env is filled in:  systemctl start arklatex-serve arklatex-stream arklatex-watchdog.timer arklatex-yt-live-watchdog.timer"

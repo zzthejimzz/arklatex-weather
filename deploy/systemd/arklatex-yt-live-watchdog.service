@@ -1,0 +1,6 @@
+[Unit]
+Description=ArkLaTex YouTube-liveness watchdog (oneshot; scheduled by timer)
+
+[Service]
+Type=oneshot
+ExecStart=/opt/arklatex/deploy/yt-live-watchdog.sh
