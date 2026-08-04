@@ -1087,6 +1087,15 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .moon-row .mr-date { font-size: 18px; font-family: var(--font-mono); text-align: right; }
 .moon-row .mr-in { font-size: 15px; color: var(--text-muted); font-family: var(--font-mono); text-align: right; }
 
+/* Sun & Daylight page (rides the forecast panel) — clock times are wider than
+   the almanac's temperatures, so the cell value runs smaller. */
+.sun-cell .ac-val { font-size: 46px; font-family: var(--font-mono); letter-spacing: 0.01em; }
+.sun-tip {
+  background: rgba(251, 191, 36, 0.08);
+  border-color: rgba(251, 191, 36, 0.28);
+}
+.sun-tip b { color: #fbbf24; }
+
 /* Status chip: outlook day / precip-tracking label (bottom-right, idle) */
 #outlook-chip {
   position: absolute; right: 24px; bottom: calc(var(--ticker-h) + 20px); z-index: 900;

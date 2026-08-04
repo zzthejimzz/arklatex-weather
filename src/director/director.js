@@ -38,6 +38,8 @@ import { isTourable, announces } from './scoring.js';
 import { track } from '../utils/health.js';
 import { formatInches, legendHtml } from '../map/rainfall-layer.js';
 import { metricOf, cpcDir } from '../map/cpc-layer.js';
+import { dewColor } from '../map/temps-layer.js';
+import { dewLabel } from '../utils/dewpoint.js';
 import { formatDate } from '../utils/time.js';
 import { heatAlert } from '../data/heat.js';
 import { icon } from '../ui/icons.js';
@@ -282,6 +284,19 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         plan.push({ type: 'wind', dwell: busy ? 15_000 : 22_000 });
       }
     }
+    // Dew point / "muggy meter" rides right behind wind — but only when it's a
+    // talking point: oppressively humid somewhere (peak dew point ≥ 70°) or
+    // notably dry across the whole region (even the muggiest station ≤ 50°).
+    // The everyday in-between is already implied by the temps shot; a dedicated
+    // dew-point page then would just be filler. Southerners feel the dew point
+    // more than the raw temperature, so the extreme ends of it are real weather.
+    const dews = obs.filter(o => o.dewF != null);
+    if (dews.length >= 6) {
+      const peakDew = Math.max(...dews.map(o => o.dewF));
+      if (peakDew >= 70 || peakDew <= 50) {
+        plan.push({ type: 'dewpoint', dwell: busy ? 15_000 : 22_000 });
+      }
+    }
     // Satellite — the view from space. One GOES channel per cycle; the
     // visible channel is only in the rotation while the sun is up.
     const sat = satelliteLayer?.channels() ?? [];
@@ -373,10 +388,15 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     } else if (aurora && !busy && auroraQuietCycles++ % AURORA_QUIET_EVERY === 0) {
       plan.push({ type: 'aurora', dwell: 25_000 });
     }
-    // Moon phases close the cycle — computed locally so always available,
-    // but it's filler by design: busy idle cycles (watches, MCDs, echoes on
-    // radar) skip it to keep the rotation on the weather.
-    if (!busy) plan.push({ type: 'moon', dwell: 22_000 });
+    // Sun & Daylight, then moon phases, close the cycle — both computed
+    // locally so always available, and both filler by design: busy idle cycles
+    // (watches, MCDs, echoes on radar) skip them to keep the rotation on the
+    // weather. The daylight page (gaining/losing daylight, sunrise/sunset) is
+    // the natural companion to the moon closer, so they air back to back.
+    if (!busy) {
+      plan.push({ type: 'sun', dwell: 22_000 });
+      plan.push({ type: 'moon', dwell: 22_000 });
+    }
 
     // A Gulf threat gets woven through the whole lap instead of appearing once.
     // Two ways to qualify: the NHC is already tracking a system whose current
@@ -474,7 +494,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     resetRadarMode();
     if (step.type !== 'report') reportsLayer?.highlight(null);
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
-    if (step.type !== 'temps' && step.type !== 'feels') tempsLayer?.hide();
+    if (step.type !== 'temps' && step.type !== 'feels' && step.type !== 'dewpoint') tempsLayer?.hide();
     if (step.type !== 'wind') windLayer?.hide();
     if (step.type !== 'river') riverLayer?.hide();
     if (step.type !== 'pollen') pollenLayer?.hide();
@@ -639,6 +659,20 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }
+      case 'sun': {
+        // Quiet-cycle closer on the same panel, paired with the moon page:
+        // today's sunrise/sunset, day length, and the gaining/losing-daylight
+        // trend, all computed locally (no feed to wait on).
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        if (!forecastPanel?.showSun()) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
       case 'moon': {
         // Quiet-cycle closer on the same panel: tonight's moon + the next
         // four principal phases, computed locally (no feed to wait on).
@@ -702,6 +736,30 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         showChip(gusting
           ? `${icon('wind')} Wind &amp; Gusts<span class="sub">Peak gust: <b>${peak.gustMph} mph</b> at ${peak.city} · NWS observations</span>`
           : `${icon('wind')} Wind &amp; Gusts<span class="sub">Strongest: <b>${peak.windMph} mph</b> at ${peak.city} · NWS observations</span>`);
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'dewpoint': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        outlookLayer.show('day1');
+        // Re-read live obs — the plan may be minutes old, and the muggy/dry
+        // extreme that earned this shot could have eased since it was built.
+        const dews = (obsFeed?.get() ?? []).filter(o => o.dewF != null);
+        if (dews.length < 6) return advance();
+        const peakDew = Math.max(...dews.map(o => o.dewF));
+        if (peakDew < 70 && peakDew > 50) return advance(); // back to everyday humidity
+        tempsLayer?.show(dews, 'dewF', dewColor);
+        if (peakDew >= 70) {
+          const peak = dews.reduce((a, b) => (b.dewF > a.dewF ? b : a));
+          showChip(`${icon('drop')} Dew Point — Muggy Meter<span class="sub">Peak: <b style="color:${dewColor(peak.dewF)}">${peak.dewF}°</b> at ${peak.city} · ${dewLabel(peak.dewF)} · NWS observations</span>`);
+        } else {
+          const driest = dews.reduce((a, b) => (b.dewF < a.dewF ? b : a));
+          showChip(`${icon('drop')} Dew Point — Comfort Check<span class="sub">Down to <b style="color:${dewColor(driest.dewF)}">${driest.dewF}°</b> at ${driest.city} · dry, comfortable air · NWS observations</span>`);
+        }
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;

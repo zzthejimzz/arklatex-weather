@@ -5,6 +5,7 @@
 import { fetchWithTimeout } from '../utils/net.js';
 import { track } from '../utils/health.js';
 import { feelsLikeF } from '../utils/feels-like.js';
+import { dewPointF } from '../utils/dewpoint.js';
 
 // ASOS/AWOS stations chosen for even coverage of the CWA. `city` is the
 // on-air name (ticker + map label), not the airport's.
@@ -57,6 +58,7 @@ async function fetchStation([id, city, lat, lon]) {
   return {
     id, city, lat, lon, tempF, windMph, gustMph, windDir,
     feelsF: feelsLikeF(tempF, rh, windMph),
+    dewF: dewPointF(t, rh), // from raw °C for accuracy, not the rounded tempF
     desc: p.textDescription ?? '',
     at: p.timestamp,
   };

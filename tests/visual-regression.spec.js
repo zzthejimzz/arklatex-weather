@@ -20,6 +20,7 @@ const STATES = [
   { name: 'aqi', query: 'visual-test&aqi' },
   { name: 'pollen', query: 'visual-test&pollen' },
   { name: 'aurora', query: 'visual-test&aurora' },
+  { name: 'sun', query: 'visual-test&sun' },
   { name: 'moon', query: 'visual-test&moon' },
 ];
 
@@ -29,6 +30,10 @@ test.describe('1920×1080 broadcast states', () => {
       await page.clock.setFixedTime(FIXED_TIME);
       await page.route('**/*', route => {
         const url = new URL(route.request().url());
+        // The dev server has no /nowplaying route, so it serves index.html for
+        // it — the music widget would then show that HTML as a "track title".
+        // Abort it so the banner stays in its idle state, deterministically.
+        if (url.pathname === '/nowplaying') return route.abort();
         return url.hostname === '127.0.0.1' ? route.continue() : route.abort();
       });
 

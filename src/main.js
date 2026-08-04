@@ -9,7 +9,7 @@ import { createAlertsLayer } from './map/alerts-layer.js';
 import { createReportsLayer } from './map/reports-layer.js';
 import { createPrecipFocusLayer } from './map/precip-focus.js';
 import { createMcdLayer } from './map/mcd-layer.js';
-import { createTempsLayer } from './map/temps-layer.js';
+import { createTempsLayer, dewColor } from './map/temps-layer.js';
 import { createWindLayer } from './map/wind-layer.js';
 import { createSatelliteLayer } from './map/satellite-layer.js';
 import { createRainfallLayer } from './map/rainfall-layer.js';
@@ -339,6 +339,15 @@ async function boot() {
       clearInterval(t);
       windLayer.show(obs);
     }, 500);
+  } else if (params.has('dew')) {
+    // Dev-only: park wide with the dew-point / muggy-meter chips once obs arrive.
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const obs = obsSource.get().filter(o => o.dewF != null);
+      if (obs.length < 5) return;
+      clearInterval(t);
+      tempsLayer.show(obs, 'dewF', dewColor);
+    }, 500);
   } else if (params.has('rain')) {
     // Dev-only: park wide with rainfall totals over a hidden radar loop.
     // ?rain picks 24h; ?rain=p48h / ?rain=p72h select the other windows.
@@ -643,6 +652,16 @@ async function boot() {
       document.documentElement.dataset.visualReady = 'moon';
     } else {
       setTimeout(() => forecastPanel.showMoon(), 2_500);
+    }
+  }
+  if (params.has('sun')) {
+    // ?sun forces the Sun & Daylight page — computed locally like ?moon, so
+    // the same delay past the director's first overview tick applies.
+    if (visualTest) {
+      forecastPanel.showSun();
+      document.documentElement.dataset.visualReady = 'sun';
+    } else {
+      setTimeout(() => forecastPanel.showSun(), 2_500);
     }
   }
 }

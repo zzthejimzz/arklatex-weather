@@ -23,6 +23,24 @@ export function tempColor(f) {
   return RAMP[RAMP.length - 1][1];
 }
 
+// Dew-point → color for the "muggy meter" mode. Not the temperature ramp: dew
+// point reads on its own comfort scale, dry (cool blue/green) climbing to the
+// oppressive Gulf air (red → magenta), so the chips shout the mugginess.
+const DEW_RAMP = [
+  [49, '#38bdf8'],       // dry — sky blue
+  [54, '#2dd4a8'],       // pleasant — teal
+  [59, '#a3d34e'],       // comfortable — green
+  [64, '#f5c33b'],       // getting sticky — yellow
+  [69, '#f08c1d'],       // uncomfortable — orange
+  [74, '#e23c3c'],       // oppressive — red
+  [Infinity, '#c026d3'], // miserable — magenta
+];
+
+export function dewColor(f) {
+  for (const [max, color] of DEW_RAMP) if (f <= max) return color;
+  return DEW_RAMP[DEW_RAMP.length - 1][1];
+}
+
 // CSS gradient of the ramp across [lo, hi] with hard stops — the ramp is
 // banded, not interpolated, so the scale strip shows the same discrete
 // colors the chips do (the almanac's record-span meter uses this).
@@ -52,9 +70,10 @@ export function createTempsLayer(map) {
     }
   }
 
-  // `key` picks which reading the chips plot: 'tempF' (default) or 'feelsF'
-  // for the feels-like mode — same ramp, the scale means the same thing.
-  function show(obs, key = 'tempF') {
+  // `key` picks which reading the chips plot: 'tempF' (default), 'feelsF' for
+  // the feels-like mode (same temperature ramp — the scale means the same
+  // thing), or 'dewF' with `colorFn=dewColor` for the muggy-meter mode.
+  function show(obs, key = 'tempF', colorFn = tempColor) {
     group.clearLayers();
     for (const o of obs) {
       const v = o[key];
@@ -68,7 +87,7 @@ export function createTempsLayer(map) {
             className: 'temp-anchor',
             html: `
               <div class="temp-chip">
-                <b style="color:${tempColor(v)}">${v}°</b>
+                <b style="color:${colorFn(v)}">${v}°</b>
                 <span>${o.city}</span>
               </div>`,
             iconSize: [0, 0],

@@ -5,8 +5,24 @@
 import { formatLocalTime, formatDate } from '../utils/time.js';
 import { tempColor, rampGradient } from '../map/temps-layer.js';
 import { moonInfo, nextPhases } from '../utils/moon.js';
+import { sunInfo } from '../utils/sun.js';
 import { LOCAL_THRESHOLD } from '../data/aurora.js';
 import { icon } from './icons.js';
+
+// Sun & Daylight anchor: Shreveport-ish center of the CWA. Sunrise/sunset vary
+// under two minutes across the region, so one point speaks for all of it.
+const SUN_LAT = 32.52;
+const SUN_LON = -93.75;
+
+// "2 min 12 sec" / "48 sec" for a signed day-length change in seconds.
+function fmtDaylightDelta(sec) {
+  const a = Math.abs(sec);
+  const mm = Math.floor(a / 60);
+  const ss = a % 60;
+  if (mm && ss) return `${mm} min ${ss} sec`;
+  if (mm) return `${mm} min`;
+  return `${ss} sec`;
+}
 
 function dayCell(d) {
   const lo = d.lo != null ? ` / <span class="lo">${d.lo}°</span>` : '';
@@ -496,6 +512,63 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Sun & Daylight page — computed locally in sun.js, so like the moon page
+  // there is no feed to wait on. Today's sunrise/sunset, the length of the day
+  // (and night), and the day-over-day "gaining/losing X a day" delta — the read
+  // that resonates most around the solstices and equinoxes, the natural
+  // companion to the moon closer.
+  function showSun() {
+    const now = new Date();
+    const info = sunInfo(now, SUN_LAT, SUN_LON);
+    if (!info) return false; // polar day/night — never in the ArkLaTex, but guard
+    const totalMin = Math.round(info.lengthMs / 60_000);
+    const hm = m => `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+    const noon = new Date((info.sunrise.getTime() + info.sunset.getTime()) / 2);
+    // Day-over-day change. A small dead band keeps the near-standstill days
+    // around each solstice from flapping between "gaining" and "losing".
+    const dSec = info.deltaMs == null ? null : Math.round(info.deltaMs / 1_000);
+    let pill, tip;
+    if (dSec != null && dSec >= 20) {
+      pill = `<span class="an-pill" style="color:#fbbf24;background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.4)">▲ gaining ${fmtDaylightDelta(dSec)} a day</span>`;
+      tip = `${icon('sunrise')} Days are getting longer — the ArkLaTex is gaining <b>${fmtDaylightDelta(dSec)}</b> of daylight a day right now, and the gain is fastest around the spring and fall equinoxes.`;
+    } else if (dSec != null && dSec <= -20) {
+      pill = `<span class="an-pill" style="color:#67e8f9;background:rgba(34,211,238,0.10);border-color:rgba(34,211,238,0.34)">▼ losing ${fmtDaylightDelta(-dSec)} a day</span>`;
+      tip = `${icon('sunset')} Days are getting shorter — the ArkLaTex is losing <b>${fmtDaylightDelta(-dSec)}</b> of daylight a day, giving up more of the evening as the year winds toward winter.`;
+    } else {
+      pill = '<span class="an-pill even">holding steady</span>';
+      tip = `${icon('sun')} Daylight is near its yearly turning point — the length of the day barely changes for a couple of weeks around each solstice before it swings back the other way.`;
+    }
+    const sunCell = (ic, label, val) => `
+      <div class="alm-cell sun-cell">
+        <div class="ac-label">${ic} ${label}</div>
+        <div class="ac-val">${val}</div>
+      </div>`;
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">${icon('sun')} Sun &amp; <span class="grad">Daylight</span></div>
+        <div class="fc-sub">${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })} · Central Time</div>
+      </div>
+      <div class="alm-now">
+        <div class="an-label">Daylight Today</div>
+        <div class="an-read"><b>${hm(totalMin)}</b>${pill}</div>
+      </div>
+      <div class="alm-sec">Today's Sun</div>
+      <div class="alm-row">
+        ${sunCell(icon('sunrise'), 'Sunrise', formatLocalTime(info.sunrise))}
+        ${sunCell(icon('sunset'), 'Sunset', formatLocalTime(info.sunset))}
+      </div>
+      <div class="alm-row">
+        ${sunCell(icon('sun'), 'Solar Noon', formatLocalTime(noon))}
+        ${sunCell(icon('moon'), 'Night Length', hm(1440 - totalMin))}
+      </div>
+      <div class="frost-tip sun-tip">${tip}</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   function hide() {
     if (!open) return;
     open = false;
@@ -504,5 +577,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showMoon, hide, ready };
+  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showMoon, showSun, hide, ready };
 }

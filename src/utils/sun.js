@@ -24,3 +24,16 @@ export function sunTimes(date, lat, lon) {
     sunset: new Date(J2000 + (jTransit + h) * DAY_MS),
   };
 }
+
+// Today's sun plus the day-length change since yesterday — the "we're
+// gaining/losing X a day" read for the Sun & Daylight page. `deltaMs` is
+// today's daylight minus yesterday's (positive = gaining, ~0 near a solstice),
+// or null when either day has no sunrise/sunset (never in the ArkLaTex).
+export function sunInfo(date, lat, lon) {
+  const today = sunTimes(date, lat, lon);
+  if (!today.sunrise || !today.sunset) return null;
+  const lengthMs = today.sunset - today.sunrise;
+  const yest = sunTimes(new Date(date.getTime() - DAY_MS), lat, lon);
+  const deltaMs = yest.sunrise && yest.sunset ? lengthMs - (yest.sunset - yest.sunrise) : null;
+  return { ...today, lengthMs, deltaMs };
+}
