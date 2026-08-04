@@ -10,6 +10,7 @@ import { createReportsLayer } from './map/reports-layer.js';
 import { createPrecipFocusLayer } from './map/precip-focus.js';
 import { createMcdLayer } from './map/mcd-layer.js';
 import { createTempsLayer } from './map/temps-layer.js';
+import { createWindLayer } from './map/wind-layer.js';
 import { createSatelliteLayer } from './map/satellite-layer.js';
 import { createRainfallLayer } from './map/rainfall-layer.js';
 import { createDroughtLayer } from './map/drought-layer.js';
@@ -112,6 +113,7 @@ async function boot() {
   if (!visualTest) obsSource.start();
   const ticker = createTicker(document.getElementById('ticker'), geo, obsSource, { live: !visualTest });
   const tempsLayer = createTempsLayer(map);
+  const windLayer = createWindLayer(map);
 
   // Quiet-day map modes: GOES satellite imagery, MRMS rainfall totals
   // (self-scanning), and the weekly U.S. Drought Monitor picture.
@@ -231,7 +233,7 @@ async function boot() {
   const regionBounds = L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(0.04);
   const director = createDirector({
     map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout,
-    radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed: obsSource,
+    radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed: obsSource,
     velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed: droughtSource,
     eroLayer, eroFeed: eroSource,
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
@@ -318,6 +320,15 @@ async function boot() {
       if (obs.length < 5) return;
       clearInterval(t);
       tempsLayer.show(obs, 'feelsF');
+    }, 500);
+  } else if (params.has('wind')) {
+    // Dev-only: park wide with the wind & gusts chips as soon as obs arrive.
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const obs = obsSource.get().filter(o => o.windMph != null);
+      if (obs.length < 5) return;
+      clearInterval(t);
+      windLayer.show(obs);
     }, 500);
   } else if (params.has('rain')) {
     // Dev-only: park wide with rainfall totals over a hidden radar loop.

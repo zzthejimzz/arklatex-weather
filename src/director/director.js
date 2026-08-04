@@ -9,7 +9,8 @@
 //                   watches (flashing outline + detail card), lower-tier alerts
 //                   (flood warnings / statements / advisories, each with the
 //                   detail card), radar echo clusters from the precip scout,
-//                   SPC outlooks Days 1–3 (wide), current temps, GOES
+//                   SPC outlooks Days 1–3 (wide), current temps, wind &
+//                   gusts (only when it's breezy enough to be a story), GOES
 //                   satellite (IR/water vapor around the clock, visible by
 //                   day), rainfall totals + river gauge flood status (NWS
 //                   river forecast centers, only when a gauge is at action
@@ -95,7 +96,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -265,6 +266,17 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       const diverges = feels.some(o => Math.abs(o.feelsF - o.tempF) >= 2);
       if (diverges && (peak >= 100 || chill <= 25)) {
         plan.push({ type: 'feels', hot: peak >= 100, dwell: busy ? 15_000 : 22_000 });
+      }
+    }
+    // Wind & gusts right after the temps cluster, but only when it's a story:
+    // gusting to 25+ or a sustained 20+ somewhere. A calm/light-breeze day is
+    // already implied by the temps shot — a dedicated wind page then is filler.
+    const winds = obs.filter(o => o.windMph != null);
+    if (winds.length >= 6) {
+      const peakGust = Math.max(...winds.map(o => o.gustMph ?? o.windMph));
+      const peakWind = Math.max(...winds.map(o => o.windMph));
+      if (peakGust >= 25 || peakWind >= 20) {
+        plan.push({ type: 'wind', dwell: busy ? 15_000 : 22_000 });
       }
     }
     // Satellite — the view from space. One GOES channel per cycle; the
@@ -451,6 +463,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     if (step.type !== 'report') reportsLayer?.highlight(null);
     if (step.type !== 'mcd') mcdLayer?.highlight(null);
     if (step.type !== 'temps' && step.type !== 'feels') tempsLayer?.hide();
+    if (step.type !== 'wind') windLayer?.hide();
     if (step.type !== 'river') riverLayer?.hide();
     if (step.type !== 'pollen') pollenLayer?.hide();
     switch (step.type) {
@@ -654,6 +667,29 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         showChip(step.hot
           ? `${icon('hot')} Feels Like — Heat Index<span class="sub">Peak: <b>${ext.feelsF}°</b> at ${ext.city} · temperature + humidity</span>`
           : `${icon('freeze')} Feels Like — Wind Chill<span class="sub">Coldest: <b>${ext.feelsF}°</b> at ${ext.city} · temperature + wind</span>`);
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'wind': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        outlookLayer.show('day1');
+        // Recompute the peak from live obs — the plan may be minutes old, and
+        // a lull since it was built means this shot no longer has a story.
+        const winds = (obsFeed?.get() ?? []).filter(o => o.windMph != null);
+        if (winds.length < 6) return advance();
+        const peak = winds.reduce((a, b) =>
+          (b.gustMph ?? b.windMph) > (a.gustMph ?? a.windMph) ? b : a);
+        const peakVal = peak.gustMph ?? peak.windMph;
+        if (peakVal < 20) return advance();
+        windLayer?.show(winds);
+        const gusting = peak.gustMph != null && peak.gustMph > peak.windMph;
+        showChip(gusting
+          ? `${icon('wind')} Wind &amp; Gusts<span class="sub">Peak gust: <b>${peak.gustMph} mph</b> at ${peak.city} · NWS observations</span>`
+          : `${icon('wind')} Wind &amp; Gusts<span class="sub">Strongest: <b>${peak.windMph} mph</b> at ${peak.city} · NWS observations</span>`);
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
@@ -941,6 +977,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     alertsLayer.highlight(null);
     mcdLayer?.highlight(null);
     tempsLayer?.hide();
+    windLayer?.hide();
     riverLayer?.hide();
     pollenLayer?.hide();
     forecastPanel?.hide();
@@ -962,6 +999,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     alertsLayer.highlight(null);
     reportsLayer?.highlight(null);
     tempsLayer?.hide();
+    windLayer?.hide();
     riverLayer?.hide();
     pollenLayer?.hide();
     forecastPanel?.hide();
@@ -980,6 +1018,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     reportsLayer?.highlight(null);
     mcdLayer?.highlight(null);
     tempsLayer?.hide();
+    windLayer?.hide();
     riverLayer?.hide();
     pollenLayer?.hide();
     forecastPanel?.hide(); // restores full-width map before the fly is computed
@@ -1019,6 +1058,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     reportsLayer?.highlight(null);
     mcdLayer?.highlight(null);
     tempsLayer?.hide();
+    windLayer?.hide();
     riverLayer?.hide();
     pollenLayer?.hide();
     forecastPanel?.hide();

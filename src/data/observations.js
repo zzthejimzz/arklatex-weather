@@ -45,12 +45,17 @@ async function fetchStation([id, city, lat, lon]) {
   if (Date.now() - new Date(p.timestamp) > MAX_AGE_MS) throw new Error(`stale obs ${id}`);
   const t = p.temperature?.value;
   const ws = p.windSpeed?.value;
+  const wg = p.windGust?.value;
   const kmh = (p.windSpeed?.unitCode ?? '').includes('km_h');
+  const gustKmh = (p.windGust?.unitCode ?? '').includes('km_h');
   const rh = p.relativeHumidity?.value;
   const tempF = t == null ? null : cToF(t);
   const windMph = ws == null ? null : Math.round(ws * (kmh ? 0.621 : 2.237));
+  const gustMph = wg == null ? null : Math.round(wg * (gustKmh ? 0.621 : 2.237));
+  // Meteorological wind direction — degrees the wind blows *from* (null when calm).
+  const windDir = p.windDirection?.value ?? null;
   return {
-    id, city, lat, lon, tempF, windMph,
+    id, city, lat, lon, tempF, windMph, gustMph, windDir,
     feelsF: feelsLikeF(tempF, rh, windMph),
     desc: p.textDescription ?? '',
     at: p.timestamp,

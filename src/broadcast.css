@@ -741,6 +741,18 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   letter-spacing: 0.04em;
 }
 
+/* Wind & gusts map chip: reuses the temp-chip shell (§ temps). The big number
+   is the sustained wind with a small "mph" unit and a flow-direction arrow;
+   the gust (when notable) rides the name line, tinted to stand out. */
+.wind-chip b { display: flex; align-items: center; gap: 3px; }
+.wind-chip b small {
+  font-size: 11px; font-weight: 700; margin-left: 1px;
+  color: var(--text-muted); align-self: flex-end; padding-bottom: 3px;
+}
+.wind-chip .wind-dir { display: inline-flex; width: 20px; height: 20px; }
+.wind-chip .wind-dir .wind-arrow { width: 100%; height: 100%; }
+.wind-chip .wg { color: var(--accent-cyan); font-weight: 800; }
+
 /* ─── 3-day city forecast panel (idle cycle) ────────────────────────── */
 /* The map snaps narrower the instant the panel starts sliding in — the
    resize reads as part of the panel motion, and the director re-frames the
