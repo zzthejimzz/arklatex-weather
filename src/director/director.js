@@ -701,7 +701,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
           .join(' ');
         const stageTxt = Number.isFinite(worst.stage) && worst.stage > -900
           ? ` (${worst.stage.toFixed(1)} ${worst.unit})` : '';
-        showChip(`${worst.icon} River Levels<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label}</b> — ${worst.name}${stageTxt}</span><span class="sub">${legend} &nbsp;·&nbsp; NWS river forecast centers</span>`);
+        showChip(`${worst.icon} River Levels<span class="sub">Highest gauge: <b style="color:${worst.chip}">${worst.label}</b> — ${worst.name}${stageTxt}</span><span class="sub">${legend} &nbsp;·&nbsp; one pin per gauge · NWS river forecast centers</span>`);
         fly(L.latLng(worst.lat, worst.lon).toBounds(RIVER_BOX_M), RIVER_MAX_ZOOM);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
