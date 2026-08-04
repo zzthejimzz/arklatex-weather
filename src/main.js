@@ -25,6 +25,8 @@ import { createTropicalStormLayer } from './map/tropical-storm-layer.js';
 import { createTropicalStormSource } from './data/tropical-storm.js';
 import { createRiverGaugeLayer } from './map/river-gauge-layer.js';
 import { createRiverGaugeSource } from './data/river-gauges.js';
+import { createCpcLayer } from './map/cpc-layer.js';
+import { createCpcSource } from './data/cpc.js';
 import { createAlmanacSource } from './data/almanac.js';
 import { createFrostSource } from './data/frost.js';
 import { createUvSource } from './data/uv.js';
@@ -155,6 +157,12 @@ async function boot() {
   if (!visualTest) riverSource.start();
   const riverLayer = createRiverGaugeLayer(map);
 
+  // CPC 6–10 & 8–14 day temperature/precip outlooks — only airs for a product
+  // the region actually leans above/below normal on (the beyond-the-week read).
+  const cpcSource = createCpcSource(geo);
+  if (!visualTest) cpcSource.start();
+  const cpcLayer = createCpcLayer(map);
+
   // Daily climate almanac: normals + records for the climate cities.
   const almanacSource = createAlmanacSource();
   if (!visualTest) almanacSource.start();
@@ -239,6 +247,7 @@ async function boot() {
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
     tropicalStormLayer, tropicalStormFeed: tropicalStormSource,
     riverLayer, riverFeed: riverSource,
+    cpcLayer, cpcFeed: cpcSource,
     almanacFeed: almanacSource, frostFeed: frostSource,
     uvFeed: uvSource, aqiFeed: aqiSource,
     pollenLayer, pollenFeed: pollenSource, auroraFeed: auroraSource,
@@ -363,6 +372,19 @@ async function boot() {
       clearInterval(t);
       outlookLayer.hide(); // here, not at boot — the async day-1 show would repaint over an early hide
       eroLayer.show(features);
+    }, 500);
+  } else if (params.has('cpc')) {
+    // Dev-only: park wide with a CPC outlook's fills once they arrive. ?cpc
+    // picks 6–10 day temperature; ?cpc=610prcp / 814temp / 814prcp select the
+    // other three products.
+    const product = params.get('cpc') || '610temp';
+    map.fitBounds(regionBounds);
+    const t = setInterval(() => {
+      const features = cpcSource.get(product);
+      if (!features.length) return;
+      clearInterval(t);
+      outlookLayer.hide(); // after data, like ?ero — the async day-1 show would repaint over an early hide
+      cpcLayer.show(product, features);
     }, 500);
   } else if (params.has('river')) {
     // Dev-only: park wide with river gauge pins once a notable reading

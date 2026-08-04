@@ -21,7 +21,9 @@
 //                   cone of uncertainty, + the tropical outlook when the
 //                   Atlantic has a development area — with a per-disturbance
 //                   camera visit when there are several), then the forecast
-//                   board, the climate almanac, frost/freeze + growing-season normals,
+//                   board, the CPC 6–10 & 8–14 day temperature/precipitation
+//                   outlooks (only for a product the region leans above/below
+//                   normal on), the climate almanac, frost/freeze + growing-season normals,
 //                   UV index, air quality, and the pollen count — index dots
 //                   for every city plus one city's allergen detail card
 //                   (each one city per cycle);
@@ -35,6 +37,7 @@ import { GULF_BBOX } from '../map/tropical-layer.js';
 import { isTourable, announces } from './scoring.js';
 import { track } from '../utils/health.js';
 import { formatInches, legendHtml } from '../map/rainfall-layer.js';
+import { metricOf, cpcDir } from '../map/cpc-layer.js';
 import { formatDate } from '../utils/time.js';
 import { heatAlert } from '../data/heat.js';
 import { icon } from '../ui/icons.js';
@@ -96,7 +99,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -332,6 +335,14 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       plan.push({ type: 'forecast', dwell: 30_000 });
       plan.push({ type: 'forecast-city', dwell: busy ? 18_000 : 25_000 });
     }
+    // Beyond the 7-day board: CPC's 6–10 & 8–14 day temperature/precip
+    // outlooks — the "warmer/wetter than normal next week?" read. One stop per
+    // product the region actually leans on; Equal-Chances products self-skip
+    // (products() returns only the leaning ones, and the runtime re-checks the
+    // lean before painting in case it flattened since the plan was built).
+    for (const product of cpcFeed?.products() ?? []) {
+      plan.push({ type: 'cpc', product, dwell: busy ? 13_000 : 18_000 });
+    }
     // Climate almanac rides the same panel right after the forecast pages —
     // one city per cycle, today's normals + records.
     if (almanacFeed?.ready()) plan.push({ type: 'almanac', dwell: busy ? 18_000 : 25_000 });
@@ -445,6 +456,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     droughtLayer?.hide();
     eroLayer?.hide();
     firewxLayer?.hide();
+    cpcLayer?.hide();
     tropicalLayer?.hide();
     tropicalStormLayer?.hide();
     // Precip-shot extras: the ringed town marker and the GL-label suppression
@@ -795,6 +807,34 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
           .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
           .join(' ');
         showChip(`${icon('fire')} Day ${dayNum} Fire Weather Outlook<span class="sub">Highest locally: <b style="color:${worst.chip}">${worst.label} Fire Risk</b></span><span class="sub">${legend} &nbsp;·&nbsp; gusty wind + low humidity — SPC</span>`);
+        fly(wideBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'cpc': {
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        const lean = cpcFeed?.lean(step.product);
+        const info = lean && cpcLayer?.show(step.product, cpcFeed.get(step.product));
+        if (!info) return advance(); // region went Equal-Chances since the plan was built
+        outlookLayer.hide(); // the convective risk fills would clash with this ramp
+        outlookHidden = true;
+        const metric = metricOf(step.product);
+        const range = step.product.startsWith('610') ? '6–10 Day' : '8–14 Day';
+        const dir = cpcDir(metric, lean.cat);
+        const title = metric === 'temp'
+          ? `${icon('hot')} ${range} Temperature Outlook`
+          : `${icon('rain')} ${range} Precipitation Outlook`;
+        const legend = info.legend
+          .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
+          .join(' ');
+        const valid = cpcFeed.valid(step.product);
+        const window = valid && formatDate(valid.start) && formatDate(valid.end)
+          ? ` &nbsp;·&nbsp; valid ${formatDate(valid.start)} – ${formatDate(valid.end)}` : '';
+        const side = lean.cat === 'Above' ? 'above' : 'below';
+        showChip(`${title}<span class="sub">Leaning <b style="color:${dir.chip}">${dir.dir}</b> — ${lean.prob}% chance ${side} normal locally</span><span class="sub">${legend}${window} &nbsp;·&nbsp; CPC</span>`);
         fly(wideBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
