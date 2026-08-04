@@ -21,7 +21,7 @@ const SUN_LON = -93.75;
 const BRAND = 'ARKLATEX WEATHER LIVE · 24/7 coverage for NE Texas · NW Louisiana · SW Arkansas · SE Oklahoma';
 const OBS_MS = 5 * 60 * 1000; // re-read the shared feed (it polls on its own)
 const OUTLOOK_MS = 15 * 60 * 1000;
-const SCROLL_PX_PER_S = 90;
+const SCROLL_PX_PER_S = 120;
 
 export function createTicker(el, geo, obsFeed, { live = true } = {}) {
   el.innerHTML = `
