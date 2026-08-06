@@ -49,6 +49,13 @@ const OVERVIEW_DWELL_MS = 30_000;
 const SOLO_TOUR_DWELL_MS = 45_000; // lone warning holds the shot longer
 const SOLO_OVERVIEW_DWELL_MS = 15_000;
 const FLY_MS = 2_400;
+// Reactive severe-weather shots (warning/watch tours, storm-report pins, MCD
+// outlines) cut in fast rather than glide. On the GPU-less VPS the whole scene
+// (radar, GL basemap, warning outlines) is just CSS-scaled for the duration of
+// the flight and only re-renders sharp on landing, so a long glide = a long
+// blurry stretch. A short hop keeps the shot punchy and lands crisp quickly.
+// Ambient idle shots keep the cinematic FLY_MS glide.
+const CUT_FLY_MS = 900;
 const TOUR_MAX_ZOOM = 12.4; // vector road names populate from GL z11 (Leaflet 12) — streets read on air
 const WATCH_MAX_ZOOM = 8.5;
 const POI_MAX_ZOOM = 9.4;
@@ -108,9 +115,9 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
 
   // Every camera move goes through here so the radar loop can warm the
   // destination's tiles while the shot is still in the air.
-  function fly(bounds, maxZoom) {
+  function fly(bounds, maxZoom, flyMs = FLY_MS) {
     radar?.prewarm(bounds, maxZoom);
-    map.flyToBounds(bounds, { duration: FLY_MS / 1000, ...(maxZoom ? { maxZoom } : {}) });
+    map.flyToBounds(bounds, { duration: flyMs / 1000, ...(maxZoom ? { maxZoom } : {}) });
   }
 
   let active = [];
@@ -1082,8 +1089,8 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     hideChip();
     reportsLayer?.highlight(live.id);
     popup.showReport(live);
-    fly(L.latLng(live.lat, live.lon).toBounds(REPORT_BOX_M), REPORT_MAX_ZOOM);
-    dwellUntil = Date.now() + FLY_MS + dwell;
+    fly(L.latLng(live.lat, live.lon).toBounds(REPORT_BOX_M), REPORT_MAX_ZOOM, CUT_FLY_MS);
+    dwellUntil = Date.now() + CUT_FLY_MS + dwell;
   }
 
   // Camera visit to a Mesoscale Discussion outline — idle plan only (MCDs are
@@ -1104,8 +1111,8 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     hideChip();
     mcdLayer?.highlight(live.key);
     popup.showMcd(live);
-    fly(L.latLngBounds(boundsToLeaflet(live.bounds)).pad(0.25), MCD_MAX_ZOOM);
-    dwellUntil = Date.now() + FLY_MS + dwell;
+    fly(L.latLngBounds(boundsToLeaflet(live.bounds)).pad(0.25), MCD_MAX_ZOOM, CUT_FLY_MS);
+    dwellUntil = Date.now() + CUT_FLY_MS + dwell;
   }
 
   function startTour(alert, isNew, dwell = TOUR_DWELL_MS, maxZoom = TOUR_MAX_ZOOM) {
@@ -1121,11 +1128,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     pollenLayer?.hide();
     forecastPanel?.hide(); // restores full-width map before the fly is computed
     const bounds = L.latLngBounds(boundsToLeaflet(alert.bounds)).pad(0.3);
-    fly(bounds, maxZoom);
+    fly(bounds, maxZoom, CUT_FLY_MS);
     alertsLayer.highlight(alert.key);
     if (isNew) alertsLayer.flash(alert.key); // ~10 s white strobe as the camera arrives
     popup.show(alert, isNew);
-    dwellUntil = Date.now() + FLY_MS + dwell;
+    dwellUntil = Date.now() + CUT_FLY_MS + dwell;
 
     // Act two: swap to base velocity partway through the hold on storm-scale
     // warnings. Guarded by key so a pre-empted or expired shot never flips a
@@ -1143,7 +1150,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         );
         if (!site) return;
         showChip(`${icon('hurricane')} Storm-Relative Velocity — ${site.id} ${site.name}<span class="sub">green: toward radar · red: away · tight couplet = rotation</span>`);
-      }, FLY_MS + dwell * VELOCITY_AT);
+      }, CUT_FLY_MS + dwell * VELOCITY_AT);
     }
   }
 
@@ -1151,6 +1158,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     resetRadarMode();
     outlookLayer.show('day1'); // back to ambient categorical
     touring = null;
+    hideChip(); // clear any lingering detail card (e.g. the velocity key) before the wide shot
     popup.hide();
     alertsLayer.highlight(null);
     reportsLayer?.highlight(null);
