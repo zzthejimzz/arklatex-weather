@@ -33,6 +33,7 @@ const FRAME_MS = 650;
 const HOLD_NEWEST_MS = 2200;
 const XFADE_MS = 240;
 const MAX_ZOOM = 14;
+const NATIVE_ZOOM = 10; // ~0.5 km/px raster is fully resolved by z10; higher zooms only upscale
 const OPACITY = 1;
 
 const tileUrl = (site, stamp) =>
@@ -76,9 +77,10 @@ export function createVelocityLayer(map) {
   pane.style.zIndex = 452;
   pane.style.pointerEvents = 'none';
   // N0S has a cleaner, brighter palette than the retired N0U feed. A modest
-  // broadcast boost and one-pixel blur keep couplets vivid without allowing
-  // the grey zero-velocity field to wash out roads and warning outlines.
-  pane.style.filter = 'blur(1px) saturate(1.8) brightness(1.18) contrast(1.3)';
+  // broadcast boost keeps couplets vivid. No blur: the shot now pulls out to
+  // velocity's native scale (~z10.5) instead of over-zooming, so the raster is
+  // barely upscaled — softening it here would only throw away real detail.
+  pane.style.filter = 'saturate(1.8) brightness(1.18) contrast(1.3)';
 
   // No health beat here: velocity is an occasional overlay, silent for hours
   // on quiet days — registering it would feed the watchdog false alarms.
@@ -94,6 +96,10 @@ export function createVelocityLayer(map) {
       pane: 'velocity',
       opacity: 0,
       maxZoom: MAX_ZOOM,
+      // The single-site raster is ~0.5 km/px; z10 already resolves it fully.
+      // Cap native fetches there so any tighter display zoom scales one z10
+      // tile in-browser rather than asking tile.py to upscale beyond real data.
+      maxNativeZoom: NATIVE_ZOOM,
       updateWhenIdle: false,
       keepBuffer: 2,
       crossOrigin: 'anonymous',

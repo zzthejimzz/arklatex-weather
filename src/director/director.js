@@ -58,6 +58,7 @@ const FLY_MS = 2_400;
 // Ambient idle shots keep the cinematic FLY_MS glide.
 const CUT_FLY_MS = 0;
 const TOUR_MAX_ZOOM = 12.4; // vector road names populate from GL z11 (Leaflet 12) — streets read on air
+const VELOCITY_MAX_ZOOM = 10.5; // single-site velocity is ~0.5 km/px (native z8.5); pull out so tiles aren't 20× upscaled
 const WATCH_MAX_ZOOM = 8.5;
 const POI_MAX_ZOOM = 9.4;
 const MINOR_MAX_ZOOM = 9.8; // flood warnings / statements cover zones — stay wide enough to frame them
@@ -1153,6 +1154,10 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       velTimer = setTimeout(() => {
         velTimer = null;
         if (touring?.key !== alert.key) return;
+        // Pull the camera out to velocity's native scale before the swap: at the
+        // tour's z12.4 the 0.5 km/px raster is ~20× upscaled (mush). Reframing to
+        // ~z10.5 matches the display to the data and frames the whole couplet.
+        fly(bounds, VELOCITY_MAX_ZOOM, CUT_FLY_MS);
         const site = velocityLayer.show(
           (s + n) / 2,
           (w + e) / 2,
