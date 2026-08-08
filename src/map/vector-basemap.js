@@ -255,7 +255,12 @@ export async function addVectorBasemap(map) {
   // Hide outright during the flight (visibility:none skips the layer entirely,
   // so it costs nothing per frame). setLayoutProperty throws before the style
   // loads (an early-boot fly), so guard — the layer just stays put that once.
+  // A hard cut (director's instant fitBounds for severe shots) fires the move
+  // lifecycle synchronously with no animated frames to economize, so there is
+  // nothing to drop — skip the hide/show cycle entirely and leave roads and
+  // labels visible so they're present the instant the camera lands.
   const hideForMove = () => {
+    if (map._suppressMotionDrop) return;
     for (const s of motionLayers) {
       if (s.gl.isStyleLoaded()) s.gl.setLayoutProperty(s.id, 'visibility', 'none');
     }
@@ -265,6 +270,7 @@ export async function addVectorBasemap(map) {
   // that into a fade, so the one-time populate reads as a reveal, not a pop.
   // Suppressed labels are left hidden.
   const showOnSettle = () => {
+    if (map._suppressMotionDrop) return; // hard cut never hid anything
     for (const s of motionLayers) {
       if (!s.gl.isStyleLoaded() || (s.isLabel && labelsSuppressed)) continue;
       for (const p of s.props) s.gl.setPaintProperty(s.id, p, 0); // instant: still hidden

@@ -50,12 +50,13 @@ const SOLO_TOUR_DWELL_MS = 45_000; // lone warning holds the shot longer
 const SOLO_OVERVIEW_DWELL_MS = 15_000;
 const FLY_MS = 2_400;
 // Reactive severe-weather shots (warning/watch tours, storm-report pins, MCD
-// outlines) cut in fast rather than glide. On the GPU-less VPS the whole scene
-// (radar, GL basemap, warning outlines) is just CSS-scaled for the duration of
-// the flight and only re-renders sharp on landing, so a long glide = a long
-// blurry stretch. A short hop keeps the shot punchy and lands crisp quickly.
+// outlines) hard-cut instead of gliding. On the GPU-less VPS an animated zoom
+// just CSS-scales the whole scene (radar, GL basemap, warning outlines) for the
+// duration of the flight and only re-renders sharp on landing — so any glide,
+// however short, is a blurry stretch. A jump (0 = no animation, see fly()) has
+// no scaled frames at all: the scene renders sharp straight at the destination.
 // Ambient idle shots keep the cinematic FLY_MS glide.
-const CUT_FLY_MS = 900;
+const CUT_FLY_MS = 0;
 const TOUR_MAX_ZOOM = 12.4; // vector road names populate from GL z11 (Leaflet 12) — streets read on air
 const WATCH_MAX_ZOOM = 8.5;
 const POI_MAX_ZOOM = 9.4;
@@ -117,6 +118,15 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   // destination's tiles while the shot is still in the air.
   function fly(bounds, maxZoom, flyMs = FLY_MS) {
     radar?.prewarm(bounds, maxZoom);
+    if (flyMs <= 0) {
+      // Hard cut: no zoom animation → no CSS-scaled (blurry) frames. Suppress
+      // the motion label/road drop across the synchronous move so names and
+      // roads are present on arrival instead of blinking out and fading back.
+      map._suppressMotionDrop = true;
+      map.fitBounds(bounds, { animate: false, ...(maxZoom ? { maxZoom } : {}) });
+      map._suppressMotionDrop = false;
+      return;
+    }
     map.flyToBounds(bounds, { duration: flyMs / 1000, ...(maxZoom ? { maxZoom } : {}) });
   }
 
