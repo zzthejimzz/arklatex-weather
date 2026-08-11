@@ -28,6 +28,12 @@ function url(layer) {
 // "Pacific" — only the Atlantic can put remnants over the region.
 const isAtlantic = f => /^atl/i.test(f.properties?.basin ?? '');
 
+// NHC sometimes carries a 0% ("near zero") polygon in the development-area
+// layer — not a disturbance to feature, and it has no ✕ current-location
+// point. Drop it so the count, the "N areas to watch" headline, and the
+// per-disturbance camera visits only cover areas with a real formation chance.
+const hasChance = f => (parseInt(f.properties?.prob7day) || 0) > 0;
+
 export function createTropicalSource(onChange) {
   let data = null; // { areas, points } after the first successful poll
   let sig = '';
@@ -38,7 +44,7 @@ export function createTropicalSource(onChange) {
       const [areas, points] = await Promise.all([AREAS_LAYER, POINTS_LAYER].map(async l => {
         const res = await fetchWithTimeout(url(l), { timeoutMs: 45_000 });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return ((await res.json()).features ?? []).filter(f => f.geometry && isAtlantic(f));
+        return ((await res.json()).features ?? []).filter(f => f.geometry && isAtlantic(f) && hasChance(f));
       }));
       // Ascending by formation chance so likelier areas paint on top.
       data = {
