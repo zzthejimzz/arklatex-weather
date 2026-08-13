@@ -13,6 +13,17 @@
 # that worked). Guardrails (streak threshold, cooldown, hourly cap, treating any
 # unreachable/bot-blocked probe as inconclusive) keep it from ever bouncing a
 # stream that is actually healthy.
+#
+# 2026-08-13: YouTube began intermittently serving this datacenter IP a bot wall
+# ("Sign in to confirm you're not a bot" / playabilityStatus LOGIN_REQUIRED).
+# That page STILL embeds ytInitialPlayerResponse, so the marker guard below
+# passed it as a real channel page; it just lacked "isLive":true, so every
+# challenge got miscounted as "not live" and the watchdog bounced a perfectly
+# healthy stream every cooldown window (3 needless restarts, 07:16/07:31/07:46) --
+# and each restart was what actually dropped the channel to "Preparing stream".
+# Fix: detect the login/consent/anti-abuse interstitial explicitly and treat it
+# as inconclusive, BEFORE the isLive check, so a gated page can neither be read
+# as "not live" nor be trusted for a stray embedded "isLive":true.
 set -euo pipefail
 
 CHANNEL_URL="https://www.youtube.com/@ArkLaTexWeather/live"
@@ -68,6 +79,16 @@ html=$(curl -sS -A "$UA" -H "Accept-Language: en-US,en;q=0.9" \
 # response is treated as inconclusive -- never mistaken for "not live".
 if ! grep -q "ytInitialPlayerResponse" <<<"$html"; then
   log "probe returned a non-channel page (bot/consent?) -- inconclusive, no action"
+  exit 0
+fi
+
+# A login/consent/anti-abuse interstitial DOES still embed ytInitialPlayerResponse,
+# so it slips past the marker guard above. It carries a LOGIN_REQUIRED playability
+# status or the "not a bot" challenge text and cannot report our real live state --
+# treat it as inconclusive. Checked BEFORE isLive so a stray embedded "isLive":true
+# on such a page can't produce a false positive either.
+if grep -qE 'LOGIN_REQUIRED|Sign in to confirm you|consent\.youtube\.com|/sorry/' <<<"$html"; then
+  log "probe hit a login/consent/anti-abuse interstitial (IP flagged as bot) -- inconclusive, no action"
   exit 0
 fi
 
