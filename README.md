@@ -86,9 +86,12 @@ Expiry countdown, detection source, damage threat, max hail/wind,
 
 ### Ticker (bottom)
 
-Active alerts → SPC Day-1 risk for the region → live city observations
-(KSHV/KTXK/KTYR/KGGG/KMLU/KLFK) → sunrise/sunset almanac → branding. Content
-swaps at the loop seam so the scroll never jumps.
+Rotates one item at a time as a static full-width line — active alerts →
+SPC Day-1 risk for the region → live city observations
+(KSHV/KTXK/KTYR/KGGG/KMLU/KLFK) → sunrise/sunset almanac → branding — with a
+brief roll-up transition every ~8 s. A brand-new alert jumps the rotation to
+its page immediately. (Replaced the continuous scroll, which juddered through
+the VPS's software-rendered 30 fps capture no matter how it was quantized.)
 
 ### Music + now-playing
 

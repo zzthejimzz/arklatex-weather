@@ -484,37 +484,34 @@ html, body {
 .warn-row .w-value { font-weight: 600; font-family: var(--font-mono); }
 .warn-row .w-value.hot { color: var(--accent-amber); }
 
-/* ─── Scrolling ticker ──────────────────────────────────────────────── */
+/* ─── Rotating ticker ───────────────────────────────────────────────── */
+/* One item at a time as a static full-width line; ticker.js rolls the next
+   page up every few seconds. Static text between brief transform-only rolls
+   is the point: the VPS software compositor never resamples glyphs while the
+   line holds, so the stream capture stays crisp with no scroll judder. */
 #ticker {
   position: absolute; left: 0; right: 0; bottom: 0;
   height: var(--ticker-h);
-  display: flex; align-items: center;
   overflow: hidden;
   background: linear-gradient(180deg, #0a0f1a 0%, #0c1220 100%);
   border-top: 2px solid var(--border);
   z-index: 1000;
 }
-.ticker-track {
-  display: flex; gap: 64px;
+.ticker-page {
+  position: absolute; inset: 0;
+  display: flex; align-items: center;
+  padding: 0 24px;
   white-space: nowrap;
-  animation: tickerScroll 40s linear infinite;
+  font-size: 20px; font-weight: 500;
+  transform: translateY(100%); /* parked below the frame until rolled in */
   will-change: transform;
 }
-@keyframes tickerScroll {
-  from { transform: translateX(0); }
-  /* Seam distance (one content width + one full gap) in whole pixels, set by
-     apply() in ticker.js. Pinned to an integer so steps() lands every captured
-     frame on a whole device pixel — no subpixel resample shimmer on the VPS. */
-  to   { transform: translateX(calc(var(--tk-dist, 4000) * -1px)); }
-}
-.ticker-content {
-  display: flex; align-items: center; gap: 28px;
-  font-size: 20px; font-weight: 500;
-}
+.ticker-page.tk-live { transform: translateY(0); }
+.ticker-page.tk-out  { transform: translateY(-100%); }
+.ticker-page.tk-roll { transition: transform 0.35s cubic-bezier(0.25, 0.9, 0.3, 1); }
 .tk-item { display: inline-flex; align-items: center; gap: 10px; }
 .tk-item b { font-weight: 700; }
 .tk-icon { font-size: 21px; }
-.tk-sep { color: var(--text-faint); font-size: 13px; }
 .tk-dim { color: var(--text-muted); font-size: 17px; }
 
 /* ─── Alert flashes ─────────────────────────────────────────────────── */

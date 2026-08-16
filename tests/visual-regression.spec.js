@@ -8,7 +8,6 @@ const STABLE_CAPTURE_CSS = `
     transition: none !important;
   }
   #map .leaflet-map-pane { visibility: hidden !important; }
-  .ticker-track { transform: translateX(0) !important; }
 `;
 
 const STATES = [

@@ -12,7 +12,7 @@ them consistently.
 not avionics/HUD.**
 
 The app already commits to this without saying so: gradient headline text, pill tags, colored
-severity borders, mono readouts for every number, a scrolling lower-third ticker, a persistent
+severity borders, mono readouts for every number, a rotating lower-third ticker, a persistent
 banner. That's the visual grammar of a 2020s cable-weather or ESPN-style broadcast graphics
 package (think The Weather Channel's "Max," or a modern NFL/NHL score bug), not a cockpit
 instrument panel. Two reference points to keep in mind while extending it:
@@ -246,7 +246,7 @@ Existing vocabulary (from `broadcast.css`, confirmed as canonical — extend, do
 | `lsrPop` | 0.6s | cubic-bezier(0.2, 1.6, 0.4, 1) — overshoot | New pin spawning onto the map |
 | `watchFlash` | 1.8s | ease-in-out, infinite | Watch-polygon outline opacity breathing while camera lingers |
 | `warnFlash` | 0.8s | ease-in-out, infinite | Hard attention-strobe on a brand-new warning polygon (~10s window on arrival) |
-| `tickerScroll` | 40s | linear, infinite | Lower-third ticker scroll |
+| `.tk-roll` (transition) | 0.35s | cubic-bezier(0.25, 0.9, 0.3, 1) | Lower-third ticker page roll-up (one item rolls up into place every ~8s; static between rolls — continuous scroll judders on the software-rendered VPS) |
 
 Rules for new motion:
 - **Entrances** (a card/panel appearing): 0.3–0.65s, ease or a gentle cubic-bezier overshoot
@@ -266,8 +266,13 @@ Rules for new motion:
   the one overshoot curve already established, or anything longer than 2s for a loop — this
   is a continuously-running broadcast, and anything slower reads as sluggish over an 8+ hour
   encode session.
-- `will-change: transform` only on the ticker (already applied) — don't blanket-apply it, it's
-  a targeted perf hint for the one truly continuous transform-driven animation, not a default.
+- `will-change: transform` only on the ticker pages (already applied) — don't blanket-apply
+  it, it's a targeted perf hint for the one element pair that transform-animates on a fixed
+  cadence for the life of the broadcast, not a default.
+- **No perpetual position animation.** The old scrolling ticker is the cautionary tale: on the
+  VPS's software renderer + fixed-30fps capture, continuous motion turns every dropped frame
+  into visible judder. Anything that must cycle forever should hold static and transition
+  briefly (like the ticker roll), not move continuously.
 
 ---
 
@@ -362,9 +367,9 @@ Referencing existing component patterns so new work doesn't relitigate these cho
    pollen scale, aurora Kp scale), follow the `.alm-meter`/`am-track`/`am-band`/`am-now` pattern:
    a `linear-gradient` background bar defining hard percentage stops, a white `am-now` tick,
    optional `am-band` bracket for a "normal" range, mono-font end labels below.
-9. **Ticker entry?** If the data point should also surface in the lower-third, add a `tk-item`
-   using the existing `tk-icon`/`b`/`tk-dim`/`tk-sep` structure — don't build a parallel ticker
-   pattern.
+9. **Ticker entry?** If the data point should also surface in the lower-third, add it as a
+   rotation item in `ticker.js` using the existing `tk-item`/`tk-icon`/`b`/`tk-dim` structure —
+   one item per page, sized to fit 1920px in one line — don't build a parallel ticker pattern.
 10. **Verify at both extremes.** Check the new component's icon/text at its smallest instance
     (map pin or ticker, ~13–17px) and its largest (hero card, ~60–84px) — the whole point of the
     24×24 stroke-based icon system and the Manrope/JetBrains Mono pick is that both extremes

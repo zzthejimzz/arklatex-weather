@@ -1,8 +1,12 @@
-// Bottom scrolling ticker. Rotating content, most urgent first:
+// Bottom rotating ticker. One item shows at a time as a static full-width
+// line; every DWELL_MS the next item rolls up into place (~ROLL_MS). This
+// replaced the continuous scroll: the VPS's software renderer + fixed-30fps
+// capture can't keep perpetual motion smooth (any missed frame reads as
+// judder), but text that is stationary between brief transitions hides a
+// dropped frame completely. Rotation order, most urgent first:
 //   active alerts → SPC Day 1 risk for the region → live city observations →
-//   sunrise/sunset almanac → branding line. New content swaps in at the loop
-//   seam (animationiteration) so the scroll never visibly jumps.
-//   (Phase 4: now-playing music info.)
+//   sunrise/sunset almanac → branding line. A brand-new alert jumps the
+//   rotation to its page immediately instead of waiting its turn.
 import { styleForEvent } from '../utils/alert-style.js';
 import { formatLocalTime } from '../utils/time.js';
 import { fetchOutlook } from '../utils/spc-api.js';
@@ -21,20 +25,21 @@ const SUN_LON = -93.75;
 const BRAND = 'ARKLATEX WEATHER LIVE · 24/7 coverage for NE Texas · NW Louisiana · SW Arkansas · SE Oklahoma';
 const OBS_MS = 5 * 60 * 1000; // re-read the shared feed (it polls on its own)
 const OUTLOOK_MS = 15 * 60 * 1000;
-const SCROLL_PX_PER_S = 120;
+const DWELL_MS = 8000; // static hold per page
+const ROLL_MS = 350;   // matches .tk-roll transition in broadcast.css
 
 export function createTicker(el, geo, obsFeed, { live = true } = {}) {
   el.innerHTML = `
-    <div class="ticker-track">
-      <div class="ticker-content"></div>
-      <div class="ticker-content" aria-hidden="true"></div>
-    </div>`;
-  const track = el.querySelector('.ticker-track');
-  const contents = el.querySelectorAll('.ticker-content');
-
+    <div class="ticker-page tk-live"></div>
+    <div class="ticker-page" aria-hidden="true"></div>`;
+  const pages = [...el.querySelectorAll('.ticker-page')];
+  let cur = 0;        // which page is on screen
+  let idx = 0;        // which item it shows
+  let items = [];
   let alerts = [];
+  let knownAlerts = new Set();
   let outlookText = null;
-  let pendingHtml = null;
+  let dwellTimer = null;
 
   function buildItems() {
     const items = [];
@@ -70,34 +75,50 @@ export function createTicker(el, geo, obsFeed, { live = true } = {}) {
     return items;
   }
 
+  const pageHtml = i => `<span class="tk-item">${items[i]}</span>`;
+
   function rebuild() {
-    pendingHtml = buildItems()
-      .map(i => `<span class="tk-item">${i}</span>`)
-      .join('<span class="tk-sep">◆</span>');
-    if (!contents[0].innerHTML) apply(); // first fill — don't wait for the seam
+    items = buildItems();
+    if (idx >= items.length) idx = 0;
+    if (!pages[cur].innerHTML) pages[cur].innerHTML = pageHtml(idx); // first fill
   }
 
-  function apply() {
-    if (!pendingHtml) return;
-    contents.forEach(c => { c.innerHTML = pendingHtml; });
-    pendingHtml = null;
-    // Constant scroll speed regardless of content length. The seam distance is
-    // one content width + one full gap, in whole pixels — the keyframe's
-    // endpoint (var(--tk-dist)) and the step count are the SAME integer, so the
-    // loop advances in exact 1px increments.
-    const dist = Math.round(contents[0].scrollWidth + 64);
-    track.style.setProperty('--tk-dist', dist);
-    track.style.animationDuration = `${Math.max(20, Math.round(dist / SCROLL_PX_PER_S))}s`;
-    // Quantize motion to whole pixels. Off-box we capture the page with a fixed
-    // 30 fps x11grab whose clock is unsynced to Chrome's paint clock; a linear
-    // (continuous) transform lands on fractional offsets, so the software
-    // compositor resamples the glyphs differently every grabbed frame — read as
-    // shimmer/judder on the stream. Stepping per-pixel makes every captured
-    // frame land on an integer offset (crisp, no resample); at 90 px/s the
-    // ~11 ms steps are imperceptible locally.
-    track.style.animationTimingFunction = `steps(${dist}, end)`;
+  // Roll the page at items[nextIdx] up into view. The incoming line is parked
+  // below the frame with transitions off, then both lines translate up one
+  // full ticker height together. Transform-only, and static the rest of the
+  // dwell — nothing for the software compositor to resample frame-to-frame.
+  function rollTo(nextIdx) {
+    idx = nextIdx;
+    const html = pageHtml(idx);
+    if (html === pages[cur].innerHTML) return; // same content — hold, don't roll to itself
+    const outgoing = pages[cur];
+    const incoming = pages[1 - cur];
+    clearTimeout(incoming.tkCleanup); // a still-pending cleanup would snap a re-armed line
+    clearTimeout(outgoing.tkCleanup);
+    incoming.classList.remove('tk-roll', 'tk-live', 'tk-out');
+    incoming.innerHTML = html;
+    void incoming.offsetWidth; // commit the parked position before animating
+    incoming.classList.add('tk-roll', 'tk-live');
+    incoming.removeAttribute('aria-hidden');
+    outgoing.classList.add('tk-roll', 'tk-out');
+    outgoing.classList.remove('tk-live');
+    outgoing.setAttribute('aria-hidden', 'true');
+    cur = 1 - cur;
+    // Disarm both transitions once the roll lands: the outgoing line snaps
+    // back to its parked spot, and the live line goes fully static.
+    outgoing.tkCleanup = incoming.tkCleanup = setTimeout(() => {
+      outgoing.classList.remove('tk-roll', 'tk-out');
+      incoming.classList.remove('tk-roll');
+    }, ROLL_MS + 50);
   }
-  track.addEventListener('animationiteration', apply);
+
+  function scheduleDwell() {
+    clearTimeout(dwellTimer);
+    dwellTimer = setTimeout(() => {
+      if (items.length) rollTo((idx + 1) % items.length);
+      scheduleDwell();
+    }, DWELL_MS);
+  }
 
   async function refreshOutlook() {
     try {
@@ -120,7 +141,15 @@ export function createTicker(el, geo, obsFeed, { live = true } = {}) {
 
   function setAlerts(list) {
     alerts = list;
+    // Jump the rotation to a never-before-seen alert (alerts are items[0..n-1],
+    // in list order) rather than waiting up to a full cycle to reach it.
+    const fresh = list.findIndex(a => !knownAlerts.has(a.id ?? a.key));
+    knownAlerts = new Set(list.map(a => a.id ?? a.key));
     rebuild();
+    if (fresh >= 0 && live) {
+      rollTo(fresh);
+      scheduleDwell(); // restart the hold so the new alert gets a full dwell
+    }
   }
 
   rebuild();
@@ -128,6 +157,7 @@ export function createTicker(el, geo, obsFeed, { live = true } = {}) {
     refreshOutlook();
     setInterval(rebuild, OBS_MS); // pick up fresh obs + roll the almanac at midnight
     setInterval(refreshOutlook, OUTLOOK_MS);
+    scheduleDwell();
   }
 
   return { setAlerts };
