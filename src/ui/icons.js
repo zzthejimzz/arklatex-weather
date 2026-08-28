@@ -52,6 +52,10 @@ export const ICONS = {
   'moon-last-quarter': `<svg ${M}><circle class="moon-shadow" cx="16" cy="16" r="12" fill="currentColor" fill-opacity=".1"/><path class="moon-light" d="M16 4a12 12 0 0 0 0 24Z" fill="currentColor" stroke="none"/><circle class="moon-crater" cx="11" cy="13" r="1.5" fill="currentColor" stroke="none" opacity=".3"/></svg>`,
   'moon-waning-crescent': `<svg ${M}><circle class="moon-shadow" cx="16" cy="16" r="12" fill="currentColor" fill-opacity=".1"/><path class="moon-light" d="M14 4.2a12 12 0 0 0 0 23.6A15 15 0 0 1 14 4.2Z" fill="currentColor" stroke="none"/><circle class="moon-crater" cx="10" cy="18" r="1.2" fill="currentColor" stroke="none" opacity=".3"/></svg>`,
   moon: `<svg ${M}><path class="moon-light" d="M27.5 19A12.5 12.5 0 1 1 13 4.5 10.3 10.3 0 0 0 27.5 19Z" fill="currentColor" fill-opacity=".9"/><path class="moon-star" d="M24 4v4m-2-2h4M28 10v2m-1-1h2"/></svg>`,
+  // Deep partial/near-total eclipse: a thin lit sliver against the dim,
+  // umbra-shadowed rest of the disk — same crescent construction as the
+  // waxing/waning phases above, just a much thinner sliver.
+  eclipse: `<svg ${M}><circle class="moon-shadow" cx="16" cy="16" r="12" fill="currentColor" fill-opacity=".14"/><path class="moon-light" d="M17 4.3a12 12 0 0 1 0 23.4A17 17 0 0 0 17 4.3Z" fill="currentColor" stroke="none"/><circle class="moon-crater" cx="22" cy="14" r="1.1" fill="currentColor" stroke="none" opacity=".3"/></svg>`,
 
   /* ── Pollen types ───────────────────────────────────────────────── */
   tree: `<svg ${D}><path class="botanical-trunk" d="M16 28V17" stroke-width="3"/><path class="botanical-leaf" d="M16 3 7 14h4l-5 7h20l-5-7h4L16 3Z" fill="currentColor" fill-opacity=".18"/><path d="M10 28h12"/></svg>`,

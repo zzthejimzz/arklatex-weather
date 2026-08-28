@@ -34,6 +34,7 @@ import { createAqiSource } from './data/aqi.js';
 import { createPollenSource } from './data/pollen.js';
 import { createPollenLayer } from './map/pollen-layer.js';
 import { createAuroraSource } from './data/aurora.js';
+import { createLunarEclipseSource } from './data/lunar-eclipse.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -191,6 +192,12 @@ async function boot() {
   const auroraSource = createAuroraSource();
   if (!visualTest) auroraSource.start();
 
+  // Lunar eclipse — a datebook of known events plus a live local
+  // cloud-cover read; only ever produces data on the handful of nights a
+  // year an eclipse is actually happening.
+  const eclipseSource = createLunarEclipseSource();
+  if (!visualTest) eclipseSource.start();
+
   const forecasts = visualTest ? createVisualForecasts() : createCityForecasts();
   forecasts.start();
   const forecastPanel = createForecastPanel({
@@ -251,6 +258,7 @@ async function boot() {
     almanacFeed: almanacSource, frostFeed: frostSource,
     uvFeed: uvSource, aqiFeed: aqiSource,
     pollenLayer, pollenFeed: pollenSource, auroraFeed: auroraSource,
+    eclipseFeed: eclipseSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -628,6 +636,22 @@ async function boot() {
       setTimeout(() => {
         const t = setInterval(() => {
           if (forecastPanel.showAurora(auroraSource.get())) clearInterval(t);
+        }, 500);
+      }, 2_500);
+    }
+  }
+  if (params.has('eclipse')) {
+    // Dev-only: ?eclipse forces the lunar-eclipse page. Live data only ever
+    // has something during an actual eclipse window, so this synthesizes a
+    // fixture-shaped event when nothing's active, same idea as ?heat.
+    if (visualTest) {
+      forecastPanel.showEclipse(VISUAL_FIXTURES.eclipse);
+      document.documentElement.dataset.visualReady = 'eclipse';
+    } else {
+      setTimeout(() => {
+        const t = setInterval(() => {
+          const data = eclipseSource.get() ?? VISUAL_FIXTURES.eclipse;
+          if (forecastPanel.showEclipse(data)) clearInterval(t);
         }, 500);
       }, 2_500);
     }

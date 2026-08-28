@@ -569,6 +569,45 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Lunar eclipse — rare "appointment viewing" card, live only on the
+  // handful of nights a year data/lunar-eclipse.js has an active event.
+  // Timeline reuses the aurora day-list layout (label / time pill / note);
+  // maximum eclipse gets a copper-red pill to flag the moment that matters.
+  // Viewing-chance readout borrows the almanac's now-reading treatment.
+  function showEclipse(data) {
+    if (!data) return false;
+    const { event, viewingChance } = data;
+    const stageColor = s => s.stage === 'Maximum eclipse' ? '#f0876a' : '#94a3b8';
+    const stageRow = s => `
+      <div class="aur-row">
+        <div class="ar-day">${s.stage}</div>
+        <div class="ar-pill" style="color:${stageColor(s)};background:${stageColor(s)}1f;border-color:${stageColor(s)}66">${formatLocalTime(s.time)}</div>
+        <div class="ar-vis">${s.note}</div>
+      </div>`;
+    const vcBlock = viewingChance ? `
+      <div class="alm-now" style="border-color:${viewingChance.color}66">
+        <div class="an-label">ArkLaTex Viewing Chance</div>
+        <div class="an-read">
+          <span class="an-pill" style="color:${viewingChance.color};background:${viewingChance.color}1f;border-color:${viewingChance.color}66">${viewingChance.label}</span>
+        </div>
+      </div>
+      <div class="frost-tip eclipse-tip">${icon('cloud')} ${viewingChance.blurb}</div>` : '';
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">${icon('eclipse')} Lunar <span class="grad">Eclipse</span></div>
+        <div class="fc-sub">${event.type} · ${Math.round(event.magnitudePct)}% of the Moon covered at max · Central Time</div>
+      </div>
+      ${vcBlock}
+      <div class="alm-sec">Tonight's Timeline</div>
+      <div class="aur-list">${event.stages.map(stageRow).join('')}</div>
+      <div class="frost-tip">${event.facts[0]}</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   function hide() {
     if (!open) return;
     open = false;
@@ -577,5 +616,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showMoon, showSun, hide, ready };
+  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showMoon, showSun, showEclipse, hide, ready };
 }

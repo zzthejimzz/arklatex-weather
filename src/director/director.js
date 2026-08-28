@@ -30,7 +30,9 @@
 //                   genuinely quiet cycles close on the moon-phases page,
 //                   and — rarer still, since an aurora down here is real
 //                   news only during a G1+ storm — an occasional aurora /
-//                   Kp-index outlook page.
+//                   Kp-index outlook page; a lunar eclipse page airs on the
+//                   handful of nights a year one's actually happening,
+//                   timeline + local cloud-cover viewing chance, unthrottled.
 import L from 'leaflet';
 import { boundsToLeaflet, pointInGeometry, geometryBounds, bboxesOverlap } from '../utils/geometry.js';
 import { GULF_BBOX } from '../map/tropical-layer.js';
@@ -110,7 +112,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -406,6 +408,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     } else if (aurora && !busy && auroraQuietCycles++ % AURORA_QUIET_EVERY === 0) {
       plan.push({ type: 'aurora', dwell: 25_000 });
     }
+    // Lunar eclipse — a real "look up tonight" event on the rare night one's
+    // happening. Unlike the moon-phases closer below, this isn't gated on a
+    // quiet cycle: when it's real it outranks routine filler the same way an
+    // actual aurora storm does above.
+    if (eclipseFeed?.get()) plan.push({ type: 'eclipse', dwell: busy ? 18_000 : 26_000 });
     // Sun & Daylight, then moon phases, close the cycle — both computed
     // locally so always available, and both filler by design: busy idle cycles
     // (watches, MCDs, echoes on radar) skip them to keep the rotation on the
@@ -653,6 +660,20 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         hideChip();
         outlookLayer.show('day1');
         if (!forecastPanel?.showAurora(auroraFeed?.get())) return advance();
+        fly(regionBounds);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'eclipse': {
+        // Rides right after the aurora page (or on its own if aurora's
+        // quiet): tonight's eclipse timeline + local viewing chance. Live
+        // only when data/lunar-eclipse.js has an active event.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        if (!forecastPanel?.showEclipse(eclipseFeed?.get())) return advance();
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;

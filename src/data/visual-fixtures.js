@@ -81,6 +81,25 @@ export const VISUAL_FIXTURES = {
       { day: 'Tue', label: 'G2 Moderate', color: '#facc15', visible: 'Best viewed well north of the region' },
     ],
   },
+  eclipse: {
+    updatedAt: VISUAL_NOW_ISO,
+    event: {
+      id: '2026-08-28',
+      type: 'Deep Partial Lunar Eclipse',
+      magnitudePct: 96,
+      stages: [
+        { stage: 'Penumbral begins', time: '2026-08-28T01:24:00Z', note: 'Faint shading starts creeping onto the disk — easy to miss with the naked eye.' },
+        { stage: 'Partial begins', time: '2026-08-28T02:33:00Z', note: "Earth's umbra starts biting into the Moon — this is when it gets worth watching." },
+        { stage: 'Maximum eclipse', time: '2026-08-28T04:13:00Z', note: '96% of the Moon sits in shadow — about as deep as a partial eclipse gets, with a coppery-red tint on the shaded part.' },
+        { stage: 'Partial ends', time: '2026-08-28T05:52:00Z', note: 'The umbra recedes off the disk.' },
+        { stage: 'Penumbral ends', time: '2026-08-28T07:01:00Z', note: 'Eclipse complete.' },
+      ],
+      facts: [
+        'Visible from all 50 U.S. states, with the entire event visible across the Central and Eastern time zones.',
+      ],
+    },
+    viewingChance: { tier: 'good', label: 'Good Viewing', color: '#a3e635', blurb: 'Mostly clear skies — conditions favor a good look.' },
+  },
 };
 
 export function createVisualForecasts() {
