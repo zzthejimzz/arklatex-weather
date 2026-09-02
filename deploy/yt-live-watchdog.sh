@@ -24,6 +24,17 @@
 # Fix: detect the login/consent/anti-abuse interstitial explicitly and treat it
 # as inconclusive, BEFORE the isLive check, so a gated page can neither be read
 # as "not live" nor be trusted for a stray embedded "isLive":true.
+#
+# 2026-09-02: a genuine ffmpeg RTMP drop (broken pipe) orphaned the broadcast,
+# and this watchdog correctly saw "not live" -- but its only tool, a quick
+# `systemctl restart`, came back "Preparing stream" every time (03:51/04:06/04:21),
+# burned the hourly restart cap, and then just emailed CRITICAL and gave up.
+# Manual cold-stop (stop, wait 3min, start) fixed it on the first try, same as
+# the 2026-08-03 incident this watchdog was built for. Quick restart has a 0/5
+# track record against orphaned "Preparing stream" across both incidents -- it
+# only clears a dead-process-style failure, not this one. So once the quick-
+# restart cap is exhausted, escalate automatically to cold-stop-wait-restart
+# (see the ESCALATION_* block below) instead of just alerting and stopping.
 set -euo pipefail
 
 CHANNEL_URL="https://www.youtube.com/@ArkLaTexWeather/live"
@@ -33,8 +44,19 @@ FAILS_FILE=/run/arklatex-ytlive.fails       # consecutive clear "not live" reads
 RESTARTS_FILE=/run/arklatex-ytlive.restarts # epoch timestamp per auto-restart
 FAIL_THRESHOLD=3    # consecutive "not live" reads before acting (~9 min @ 3-min cadence)
 COOLDOWN=900        # seconds to wait after a restart before another (15 min)
-MAX_PER_HOUR=3      # hard cap on auto-restarts within a rolling hour
+MAX_PER_HOUR=3      # hard cap on quick auto-restarts within a rolling hour
 ENV_FILE=/etc/arklatex/healthcheck.env      # reuse the healthcheck Gmail relay
+
+# Escalation tier: once quick restarts are exhausted (MAX_PER_HOUR reached) and
+# the channel is still not live, try a cold-stop-wait-restart instead of just
+# alerting. Rate-limited separately and more conservatively than quick restarts
+# since it takes the stream fully down for COLD_STOP_WAIT seconds -- a real
+# prolonged outage should still page a human rather than cold-cycle forever.
+ESCALATIONS_FILE=/run/arklatex-ytlive.escalations # epoch timestamp per escalation
+COLD_STOP_WAIT=180        # seconds to sit stopped before restarting (3 min; 10s was proven not enough)
+ESCALATION_COOLDOWN=1200  # seconds between escalations (20 min)
+MAX_ESCALATIONS_PER_HOUR=2
+POST_ESCALATION_PROBE_WAIT=90 # seconds to wait before re-probing to confirm recovery
 
 log() { echo "yt-live-watchdog: $*"; }
 
@@ -117,8 +139,47 @@ fi
 recent=$(awk -v cutoff=$((now - 3600)) '$1 >= cutoff' "$RESTARTS_FILE" 2>/dev/null || true)
 count=$(printf '%s\n' "$recent" | grep -c . || true)
 if [ "$count" -ge "$MAX_PER_HOUR" ]; then
-  log "restart cap reached ($count in last hour) -- NOT restarting; needs manual attention"
-  notify "[ArkLaTex CRITICAL] stream STILL not live after ${MAX_PER_HOUR} auto-restarts in the last hour -- MANUAL ATTENTION NEEDED"
+  # Quick restarts are exhausted. A quick `systemctl restart` has never once
+  # cleared a truly orphaned "Preparing stream" broadcast (2026-08-03, 2026-09-02)
+  # -- only a cold stop with a multi-minute gap has. Escalate to that, gated by
+  # its own separate cooldown/cap so a genuine prolonged outage still pages a
+  # human instead of cold-cycling the stream indefinitely.
+  last_escalation=$(tail -n1 "$ESCALATIONS_FILE" 2>/dev/null || echo 0)
+  recent_esc=$(awk -v cutoff=$((now - 3600)) '$1 >= cutoff' "$ESCALATIONS_FILE" 2>/dev/null || true)
+  esc_count=$(printf '%s\n' "$recent_esc" | grep -c . || true)
+
+  if [ "$((now - last_escalation))" -lt "$ESCALATION_COOLDOWN" ]; then
+    log "restart cap reached ($count in last hour); escalation on cooldown ($((now - last_escalation))s < ${ESCALATION_COOLDOWN}s) -- NOT restarting; needs manual attention"
+    notify "[ArkLaTex CRITICAL] stream STILL not live after ${MAX_PER_HOUR} auto-restarts in the last hour -- MANUAL ATTENTION NEEDED"
+    exit 0
+  fi
+
+  if [ "$esc_count" -ge "$MAX_ESCALATIONS_PER_HOUR" ]; then
+    log "restart cap reached ($count in last hour); escalation cap also reached ($esc_count in last hour) -- NOT restarting; needs manual attention"
+    notify "[ArkLaTex CRITICAL] stream STILL not live after repeated auto-restarts and a cold-restart escalation -- MANUAL ATTENTION NEEDED"
+    exit 0
+  fi
+
+  log "restart cap reached ($count in last hour) -- escalating to cold-stop-wait-restart"
+  notify "[ArkLaTex WARNING] quick restarts exhausted -- escalating to a cold stop (~${COLD_STOP_WAIT}s down) to clear an orphaned broadcast"
+  { printf '%s\n' "$recent_esc"; echo "$now"; } | grep -v '^$' > "$ESCALATIONS_FILE"
+  { printf '%s\n' "$recent"; echo "$now"; } | grep -v '^$' > "$RESTARTS_FILE"
+  rm -f "$FAILS_FILE"
+
+  systemctl stop arklatex-stream.service
+  sleep "$COLD_STOP_WAIT"
+  systemctl start arklatex-stream.service
+  sleep "$POST_ESCALATION_PROBE_WAIT"
+
+  recheck=$(curl -sS -A "$UA" -H "Accept-Language: en-US,en;q=0.9" \
+              --cookie "CONSENT=YES+1" -m 20 -L "$CHANNEL_URL" 2>/dev/null || true)
+  if grep -q '"isLive":true' <<<"$recheck"; then
+    log "cold-stop-wait-restart recovered the stream"
+    notify "[ArkLaTex RECOVERED] cold-restart escalation cleared the orphaned broadcast -- channel is live again"
+  else
+    log "cold-stop-wait-restart did NOT bring the channel back live"
+    notify "[ArkLaTex CRITICAL] cold-restart escalation did not bring the channel back live -- MANUAL ATTENTION NEEDED"
+  fi
   exit 0
 fi
 
