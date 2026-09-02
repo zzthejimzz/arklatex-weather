@@ -35,14 +35,27 @@
 # only clears a dead-process-style failure, not this one. So once the quick-
 # restart cap is exhausted, escalate automatically to cold-stop-wait-restart
 # (see the ESCALATION_* block below) instead of just alerting and stopping.
+#
+# 2026-09-02, second incident same day: the stream was actually fine and live
+# for 3+ hours (04:46-08:03), but YouTube bot-walled this box's probe for the
+# entire window (65 straight "inconclusive" reads). Inconclusive reads never
+# touch the fail streak, so a stale count of 8 from before the blackout just
+# sat there. The instant the bot wall lifted, one single post-blackout
+# "not live" read pushed the stale count past FAIL_THRESHOLD and force-
+# restarted an already-healthy stream. Fix: FAILS_FILE now also stores when
+# it was last incremented, and a gap longer than FAIL_STALE_AFTER resets the
+# streak to start fresh instead of resuming a stale count.
 set -euo pipefail
 
 CHANNEL_URL="https://www.youtube.com/@ArkLaTexWeather/live"
 UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
-FAILS_FILE=/run/arklatex-ytlive.fails       # consecutive clear "not live" reads
+FAILS_FILE=/run/arklatex-ytlive.fails       # "count last_seen_epoch" of clear "not live" reads
 RESTARTS_FILE=/run/arklatex-ytlive.restarts # epoch timestamp per auto-restart
 FAIL_THRESHOLD=3    # consecutive "not live" reads before acting (~9 min @ 3-min cadence)
+FAIL_STALE_AFTER=600 # seconds: a gap this long since the last increment (bot-wall
+                      # blackout, curl error, etc.) invalidates the streak so far --
+                      # tolerates one missed 3-min check, not an hours-long blind spell
 COOLDOWN=900        # seconds to wait after a restart before another (15 min)
 MAX_PER_HOUR=3      # hard cap on quick auto-restarts within a rolling hour
 ENV_FILE=/etc/arklatex/healthcheck.env      # reuse the healthcheck Gmail relay
@@ -121,14 +134,26 @@ if grep -q '"isLive":true' <<<"$html"; then
 fi
 
 # --- clear "not live": count it --------------------------------------------
-fails=$(( $(cat "$FAILS_FILE" 2>/dev/null || echo 0) + 1 ))
-echo "$fails" > "$FAILS_FILE"
+now=$(date +%s)
+read -r prev_fails prev_seen <<<"$(cat "$FAILS_FILE" 2>/dev/null || echo "0 0")"
+prev_fails=${prev_fails:-0}
+prev_seen=${prev_seen:-0}
+if [ "$((now - prev_seen))" -gt "$FAIL_STALE_AFTER" ]; then
+  # Too long since the last clear "not live" read (e.g. hours of bot-wall
+  # blackout) -- that old streak no longer proves anything about right now, so
+  # a single fresh "not live" starts a brand new streak instead of instantly
+  # tripping the threshold. Confirmed needed 2026-09-02: a stale streak of 8
+  # sitting untouched through 3+ hours of bot-walled probes combined with one
+  # post-blackout "not live" read to force-restart an already-healthy stream.
+  [ "$prev_fails" -gt 0 ] && log "previous streak ($prev_fails) is stale ($((now - prev_seen))s > ${FAIL_STALE_AFTER}s) -- resetting"
+  prev_fails=0
+fi
+fails=$((prev_fails + 1))
+echo "$fails $now" > "$FAILS_FILE"
 log "channel NOT live -- consecutive=$fails/$FAIL_THRESHOLD"
 [ "$fails" -ge "$FAIL_THRESHOLD" ] || exit 0
 
 # --- guardrails before restarting ------------------------------------------
-now=$(date +%s)
-
 last=$(tail -n1 "$RESTARTS_FILE" 2>/dev/null || echo 0)
 if [ "$((now - last))" -lt "$COOLDOWN" ]; then
   log "within cooldown ($((now - last))s < ${COOLDOWN}s since last restart) -- waiting"
