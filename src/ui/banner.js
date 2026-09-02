@@ -3,7 +3,9 @@
 // alert-type counts (right).
 import { styleForEvent, textColorFor } from '../utils/alert-style.js';
 import { formatClock, formatLocalTime, countdown, expiresSoon } from '../utils/time.js';
-import { mountNowPlaying } from './now-playing.js';
+// Now-playing widget disabled 2026-09-02: freed the ~400px it reserved next
+// to .banner-alert (flex:1) so active warnings render bigger/less clipped.
+// import { mountNowPlaying } from './now-playing.js';
 
 const MAX_COUNT_CHIPS = 5;
 
@@ -17,8 +19,6 @@ export function createBanner(el) {
       <div class="banner-clock"><span class="date"></span> &middot; <span class="time"></span></div>
     </div>
     <div class="banner-counts"><span class="counts-none">ALL CLEAR</span></div>`;
-
-  mountNowPlaying(el);
 
   const alertEl = el.querySelector('.banner-alert');
   const countsEl = el.querySelector('.banner-counts');
