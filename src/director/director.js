@@ -100,7 +100,8 @@ const HEAT_WARNING_DWELL_MS = 16_000;
 // settles, then a switch to single-site base velocity for the back half of the
 // dwell — the "is it rotating?" look. Reflectivity stays visible until the
 // velocity tiles load, then hides for the remainder of the warning shot.
-const VELOCITY_EVENTS = new Set(['tornado warning', 'severe thunderstorm warning']);
+// Disabled 2026-09-02: velocity map needs rework, pulled from rotation for now.
+const VELOCITY_EVENTS = new Set();
 const VELOCITY_AT = 0.45; // fraction of the dwell spent on reflectivity first
 
 // Destructive severe and every tornado warning: the rotation returns to it
