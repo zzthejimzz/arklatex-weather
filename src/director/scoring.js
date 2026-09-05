@@ -41,6 +41,13 @@ export function scoreAlert(props) {
   if (ev === 'tornado watch') return 30;
   if (ev === 'severe thunderstorm watch') return 25;
   if (ev === 'flood warning') return 20;
+  // Both fall to the generic severity fallback below without these, and NWS
+  // tags them with the same CAP severity ("Moderate") — so ties broke on
+  // insertion order and let Heat Advisory outrank Special Weather Statement.
+  // SPS is a step above Heat Advisory: it's often the shot across the bow
+  // (severe potential, isolated hazards) that precedes a real warning.
+  if (ev === 'special weather statement') return 10;
+  if (ev === 'heat advisory') return 5;
 
   const sev = (props.severity || '').toLowerCase();
   if (sev === 'extreme') return 18;
