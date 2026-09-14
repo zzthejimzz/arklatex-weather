@@ -7,6 +7,7 @@ import { tempColor, rampGradient } from '../map/temps-layer.js';
 import { moonInfo, nextPhases } from '../utils/moon.js';
 import { sunInfo } from '../utils/sun.js';
 import { LOCAL_THRESHOLD } from '../data/aurora.js';
+import { textColorFor } from '../utils/alert-style.js';
 import { icon } from './icons.js';
 
 // Sun & Daylight anchor: Shreveport-ish center of the CWA. Sunrise/sunset vary
@@ -474,6 +475,42 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Year-to-date warnings & watches — a ranked bar per hazard category, from
+  // the IEM VTEC archive (data/warnings-ytd.js). Genuinely quiet-day filler:
+  // nothing else in the rotation summarizes the season the way this does.
+  function showWarningsYtd(data) {
+    if (!data?.categories?.length) return false;
+    const max = Math.max(...data.categories.map(c => c.count), 1);
+    const rows = data.categories.map(c => {
+      const pct = Math.round((c.count / max) * 100);
+      return `
+        <div class="ytd-row">
+          <div class="yr-label" style="color:${c.color}">${c.iconHtml}<span class="yr-name">${c.label}</span></div>
+          <div class="yr-track">
+            <div class="yr-bar" style="width:${pct}%;background:${c.color}">
+              <b style="color:${textColorFor(c.color)}">${c.count}</b>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">${icon('chart')} ${data.year} <span class="grad">Warnings &amp; Watches</span></div>
+        <div class="fc-sub">SHV County Warning Area · since Jan 1, ${data.year} · IEM VTEC archive</div>
+      </div>
+      <div class="alm-now">
+        <div class="an-label">Total Issued This Year</div>
+        <div class="an-read"><b>${data.total}</b><span class="an-pill even">events</span></div>
+      </div>
+      <div class="ytd-bars">${rows}</div>
+      <div class="fc-sub ytd-updated">Updated ${formatLocalTime(data.updated)}</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   // Moon-phases page — computed locally in moon.js, so unlike the other
   // pages there is no feed to wait on and this can never return false.
   function showMoon() {
@@ -616,5 +653,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showMoon, showSun, showEclipse, hide, ready };
+  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showWarningsYtd, showMoon, showSun, showEclipse, hide, ready };
 }

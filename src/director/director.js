@@ -113,7 +113,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed, warningsYtdFeed }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -420,6 +420,10 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // weather. The daylight page (gaining/losing daylight, sunrise/sunset) is
     // the natural companion to the moon closer, so they air back to back.
     if (!busy) {
+      // Year-to-date warnings & watches — a genuinely-quiet-day-only feature:
+      // the season's tally is only interesting when there's nothing live to
+      // show instead.
+      if (warningsYtdFeed?.ready()) plan.push({ type: 'warnings-ytd', dwell: 22_000 });
       plan.push({ type: 'sun', dwell: 22_000 });
       plan.push({ type: 'moon', dwell: 22_000 });
     }
@@ -696,6 +700,19 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         // held for the full dwell (not the default ~10 s) so viewers can place
         // the area while the tips are up.
         for (const key of heat.keys) alertsLayer.flash(key, FLY_MS + step.dwell);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'warnings-ytd': {
+        // Quiet-cycle-only feature (gated in buildIdlePlan): ranked hazard
+        // counts for the year so far, from the IEM VTEC archive.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        if (!forecastPanel?.showWarningsYtd(warningsYtdFeed?.get())) return advance();
+        fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }

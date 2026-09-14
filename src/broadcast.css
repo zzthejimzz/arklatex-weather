@@ -968,6 +968,28 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .aqi-unit { margin-left: 4px; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 .aqi-tip { margin-top: 14px; }
 
+/* Year-to-date warnings & watches page (rides the forecast panel) — a ranked
+   bar per hazard category, each bar carrying that hazard's own map color. */
+.ytd-bars { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
+.ytd-row {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: 230px 1fr;
+  align-items: center; gap: 14px;
+  border-top: 1px solid var(--border-light);
+}
+.yr-label { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
+.yr-label svg.icon { width: var(--icon-size-sm); height: var(--icon-size-sm); flex: none; }
+/* Color rides the icon only — the category name stays in plain text ink, same
+   rule the map legends already follow (a swatch carries identity, not the label). */
+.yr-name { line-height: 1.2; color: var(--text-primary); }
+.yr-track { position: relative; height: 24px; }
+.yr-bar {
+  height: 20px; border-radius: 0 4px 4px 0; min-width: 34px;
+  display: flex; align-items: center; justify-content: flex-end; padding-right: 10px;
+}
+.yr-bar b { font-family: var(--font-mono); font-size: 15px; font-weight: 700; }
+.ytd-updated { margin-top: 10px; }
+
 /* Pollen page (rides the forecast panel) + pollen map chips */
 /* IQVIA category bands: 2.4 / 4.8 / 7.2 / 9.6 of 12 = every 20%. */
 .pollen-track {

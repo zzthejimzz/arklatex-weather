@@ -35,6 +35,7 @@ import { createPollenSource } from './data/pollen.js';
 import { createPollenLayer } from './map/pollen-layer.js';
 import { createAuroraSource } from './data/aurora.js';
 import { createLunarEclipseSource } from './data/lunar-eclipse.js';
+import { createWarningsYtdSource } from './data/warnings-ytd.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -198,6 +199,11 @@ async function boot() {
   const eclipseSource = createLunarEclipseSource();
   if (!visualTest) eclipseSource.start();
 
+  // Year-to-date warnings & watches — a quiet-day summary card, from the IEM
+  // VTEC archive (static-ish yearly tally, fetched a few times a day).
+  const warningsYtdSource = createWarningsYtdSource();
+  if (!visualTest) warningsYtdSource.start();
+
   const forecasts = visualTest ? createVisualForecasts() : createCityForecasts();
   forecasts.start();
   const forecastPanel = createForecastPanel({
@@ -258,7 +264,7 @@ async function boot() {
     almanacFeed: almanacSource, frostFeed: frostSource,
     uvFeed: uvSource, aqiFeed: aqiSource,
     pollenLayer, pollenFeed: pollenSource, auroraFeed: auroraSource,
-    eclipseFeed: eclipseSource,
+    eclipseFeed: eclipseSource, warningsYtdFeed: warningsYtdSource,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -655,6 +661,15 @@ async function boot() {
         }, 500);
       }, 2_500);
     }
+  }
+  if (params.has('ytd')) {
+    // Dev-only: ?ytd forces the year-to-date warnings page once the IEM
+    // archive fetch resolves.
+    const t = setInterval(() => {
+      const data = warningsYtdSource.get();
+      if (!data) return;
+      if (forecastPanel.showWarningsYtd(data)) clearInterval(t);
+    }, 500);
   }
   if (params.has('heat')) {
     // Dev-only: ?heat forces the heat-safety page. A live heat alert may not be
