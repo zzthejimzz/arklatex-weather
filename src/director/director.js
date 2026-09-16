@@ -414,16 +414,18 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // quiet cycle: when it's real it outranks routine filler the same way an
     // actual aurora storm does above.
     if (eclipseFeed?.get()) plan.push({ type: 'eclipse', dwell: busy ? 18_000 : 26_000 });
+    // Year-to-date warnings & watches — rides every lap like almanac/UV/AQI/
+    // pollen above (shorter dwell when busy), not gated on a quiet cycle: a
+    // CWA this active rarely if ever has zero watches/MCDs/minors/reports at
+    // once, so a !busy gate here meant it almost never aired. Unlike Sun/Moon
+    // below, this has something to say even mid-storm-season.
+    if (warningsYtdFeed?.ready()) plan.push({ type: 'warnings-ytd', dwell: busy ? 16_000 : 22_000 });
     // Sun & Daylight, then moon phases, close the cycle — both computed
     // locally so always available, and both filler by design: busy idle cycles
     // (watches, MCDs, echoes on radar) skip them to keep the rotation on the
     // weather. The daylight page (gaining/losing daylight, sunrise/sunset) is
     // the natural companion to the moon closer, so they air back to back.
     if (!busy) {
-      // Year-to-date warnings & watches — a genuinely-quiet-day-only feature:
-      // the season's tally is only interesting when there's nothing live to
-      // show instead.
-      if (warningsYtdFeed?.ready()) plan.push({ type: 'warnings-ytd', dwell: 22_000 });
       plan.push({ type: 'sun', dwell: 22_000 });
       plan.push({ type: 'moon', dwell: 22_000 });
     }
