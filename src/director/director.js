@@ -77,8 +77,13 @@ const REPORT_IN_WARN_DWELL_MS = 15_000;
 const REPORT_IN_WARN_MAX = 2;
 // A real geomagnetic storm (G1+) is worth a look any cycle, but "all quiet" —
 // the overwhelming majority of days — is even less of a story than the moon
-// phases; only surface it on one quiet cycle out of every AURORA_QUIET_EVERY.
-const AURORA_QUIET_EVERY = 5;
+// phases, so it's throttled to a minimum real-world gap between showings.
+// Deliberately a wall-clock gap, not a "every Nth idle-plan rebuild" counter:
+// idlePlan gets wiped and immediately rebuilt every time a brief warning
+// clears (any short-lived advisory flickering on/off costs a rebuild), so a
+// counter-based throttle fires far more often in wall-clock time than its
+// name suggests on an active weather day — a rebuild is not a lap.
+const AURORA_QUIET_MIN_GAP_MS = 45 * 60 * 1000;
 
 // A Gulf-adjacent disturbance at High risk (NHC's own tier starts at 70%,
 // this station picks up the pace at 80%) is appointment viewing — the idle
@@ -95,6 +100,11 @@ const GULF_WATCH_DWELL_MS = 14_000;
 // it, the same "appointment viewing" weave the Gulf watch uses.
 const HEAT_WARNING_INTERVAL = 6;
 const HEAT_WARNING_DWELL_MS = 16_000;
+
+// Year-to-date warnings & watches gets more than the single once-a-lap stop
+// almanac/UV/AQI/pollen each get — it's woven back through the rest of the
+// lap so it shows up several times, not just once.
+const WARNINGS_YTD_INTERVAL = 7;
 
 // Storm-scale warnings get a two-act shot: reflectivity while the camera
 // settles, then a switch to single-site base velocity for the back half of the
@@ -149,7 +159,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   let uvIdx = 0;    // UV index city rotation — next city each idle cycle
   let aqiIdx = 0;   // air quality city rotation — next city each idle cycle
   let pollenIdx = 0; // pollen city rotation — next city each idle cycle
-  let auroraQuietCycles = 0; // counts consecutive quiet, storm-free idle cycles
+  let auroraLastShownAt = 0; // wall-clock time of the last quiet-cycle aurora showing
 
   function onAlerts({ alerts, added }) {
     active = alerts;
@@ -406,8 +416,9 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     const aurora = auroraFeed?.get();
     if (aurora?.worstScale >= 1) {
       plan.push({ type: 'aurora', dwell: busy ? 18_000 : 25_000 });
-    } else if (aurora && !busy && auroraQuietCycles++ % AURORA_QUIET_EVERY === 0) {
+    } else if (aurora && !busy && Date.now() - auroraLastShownAt >= AURORA_QUIET_MIN_GAP_MS) {
       plan.push({ type: 'aurora', dwell: 25_000 });
+      auroraLastShownAt = Date.now();
     }
     // Lunar eclipse — a real "look up tonight" event on the rare night one's
     // happening. Unlike the moon-phases closer below, this isn't gated on a
@@ -467,6 +478,14 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // of the single stop already pushed with the health cluster.
     if (heat?.tier === 'warning') {
       weaveThrough(plan, [{ type: 'heat', dwell: HEAT_WARNING_DWELL_MS }], HEAT_WARNING_INTERVAL);
+    }
+
+    // Give the YTD warnings card more airtime than a single once-a-lap stop —
+    // weave in repeat visits the same way a Gulf threat or a heat warning
+    // does, just on a flat schedule instead of being conditional on a live
+    // threat.
+    if (warningsYtdFeed?.ready()) {
+      weaveThrough(plan, [{ type: 'warnings-ytd', dwell: busy ? 16_000 : 22_000 }], WARNINGS_YTD_INTERVAL);
     }
     return plan;
   }
