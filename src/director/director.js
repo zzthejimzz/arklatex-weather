@@ -522,6 +522,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     velocityLayer?.hide();
     radar?.setDim(false);
     radar?.setHidden(false);
+    alertsLayer.setHidden?.(false);
     satelliteLayer?.hide();
     rainfallLayer?.hide();
     droughtLayer?.hide();
@@ -539,6 +540,15 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       outlookHidden = false;
       outlookLayer.show('day1');
     }
+  }
+
+  // Product-map shots (convective/hazard outlooks, ERO, fire wx, CPC, drought,
+  // tropical) read as a clean forecast graphic — live radar echoes and warning
+  // outlines over them are clutter, and over a Day 3 or 8–14 day map they're
+  // the wrong timeframe entirely. resetRadarMode() brings both back.
+  function cleanMap() {
+    radar?.setHidden(true);
+    alertsLayer.setHidden?.(true);
   }
 
   function runIdleStep(step) {
@@ -899,6 +909,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info) return advance(); // data gone since the plan was built
         outlookLayer.hide(); // outlook risk fills run the same color ramp
         outlookHidden = true;
+        cleanMap();
         const legend = info.legend
           .map(m => `<span class="sw" style="background:${m.color}"></span>D${m.dm}`)
           .join(' ');
@@ -919,6 +930,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info) return advance(); // area gone since the plan was built
         outlookLayer.hide(); // convective risk fills run the same green→red ramp
         outlookHidden = true;
+        cleanMap();
         const dayNum = step.day.slice(3);
         const legend = info.legend
           .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
@@ -938,6 +950,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info) return advance(); // area gone since the plan was built
         outlookLayer.hide(); // convective risk fills run the same orange/red ramp
         outlookHidden = true;
+        cleanMap();
         const dayNum = step.day === 'day1' ? '1' : '2';
         const legend = info.legend
           .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
@@ -957,6 +970,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info) return advance(); // region went Equal-Chances since the plan was built
         outlookLayer.hide(); // the convective risk fills would clash with this ramp
         outlookHidden = true;
+        cleanMap();
         const metric = metricOf(step.product);
         const range = step.product.startsWith('610') ? '6–10 Day' : '8–14 Day';
         const dir = cpcDir(metric, lean.cat);
@@ -985,6 +999,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info) return advance(); // advisory dropped since the plan was built
         outlookLayer.hide(); // convective risk fills run a similar color ramp
         outlookHidden = true;
+        cleanMap();
         const wind = `${info.windMph} mph${info.gustMph > info.windMph ? ` (gusts ${info.gustMph})` : ''}`;
         const move = info.moveDir
           ? `Moving ${info.moveDir} at ${info.moveMph} mph`
@@ -1041,6 +1056,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info) return advance(); // basin went quiet since the plan was built
         outlookLayer.hide(); // convective risk fills run the same yellow→red ramp
         outlookHidden = true;
+        cleanMap();
         const legend = info.legend
           .map(m => `<span class="sw" style="background:${m.color}"></span>${m.label}`)
           .join(' ');
@@ -1075,6 +1091,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         if (!info?.focus) return advance();
         outlookLayer.hide(); // convective risk fills run the same yellow→red ramp
         outlookHidden = true;
+        cleanMap();
         showChip(`${icon('hurricane')} Disturbance ${step.rank + 1} of ${data.areas.length}<span class="sub">7-day formation chance: <b style="color:${info.focus.chip}">${info.focus.prob7}% (${info.focus.label})</b> &nbsp;·&nbsp; next 48 hours: ${info.focus.prob2}%</span><span class="sub">✕ current location &nbsp;·&nbsp; potential development area — NHC</span>`);
         fly(L.latLngBounds(boundsToLeaflet(info.focus.bbox)).pad(0.35), 7);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
@@ -1105,6 +1122,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         // meanwhile, dwellUntil has moved and the result belongs to a dead shot.
         const myShot = dwellUntil;
         const hazard = step.hazard ?? 'cat';
+        // Clean the frame up front, not after the peek: a hazard stop that
+        // skips (no local threat) leaves the previous outlook holding on
+        // screen, and resetRadarMode() would otherwise have put radar and
+        // warnings back over it while the peek was in flight.
+        cleanMap();
         (async () => {
           if (step.hazard) {
             // Peek before painting or moving the camera — a threat that

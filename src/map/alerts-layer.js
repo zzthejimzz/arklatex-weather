@@ -148,5 +148,15 @@ export function createAlertsLayer(map) {
     setTimeout(syncFlash, ms + 100); // clear the class when the window closes
   }
 
-  return { update, highlight, flash };
+  // Product-map shots (SPC/WPC/CPC outlooks, drought, tropical) want a clean
+  // frame — hide both alert panes outright. Pane-level so update() keeps
+  // rebuilding underneath and the polygons are current the moment they return.
+  function setHidden(h) {
+    for (const name of ['warnings', 'watches']) {
+      const pane = map.getPane(name);
+      if (pane) pane.style.display = h ? 'none' : '';
+    }
+  }
+
+  return { update, highlight, flash, setHidden };
 }
