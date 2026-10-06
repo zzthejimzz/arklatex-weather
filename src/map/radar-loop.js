@@ -199,6 +199,29 @@ const SmoothRadarLayer = L.GridLayer.extend({
     this.redraw();
   },
 
+  // Leaflet's redraw() takes the map's raw zoom as the tile zoom, unlike its
+  // own view updates which round it. With zoomSnap: 0 the map sits at zooms
+  // like 8.6, so every redraw (the 5-minute refresh, a late MRMS mask) built
+  // bogus /8.6/ tile URLs and left the frame blank until the next camera move
+  // re-rounded it. Mirror the rounding Leaflet's _setView does.
+  redraw() {
+    if (!this._map) return this;
+    this._removeAllTiles();
+    let tileZoom = Math.round(this._map.getZoom());
+    const { maxZoom, minZoom } = this.options;
+    if ((maxZoom !== undefined && tileZoom > maxZoom) || (minZoom !== undefined && tileZoom < minZoom)) {
+      tileZoom = undefined;
+    } else {
+      tileZoom = this._clampZoom(tileZoom);
+    }
+    if (tileZoom !== this._tileZoom) {
+      this._tileZoom = tileZoom;
+      this._updateLevels();
+    }
+    this._update();
+    return this;
+  },
+
   createTile(coords, done) {
     const tile = document.createElement('canvas');
     // Local/browser mode keeps the 2× supersampled output. The VPS stream uses
