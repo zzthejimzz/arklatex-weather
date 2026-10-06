@@ -114,7 +114,7 @@ async function boot() {
   const alertsLayer = createAlertsLayer(map);
   const banner = createBanner(document.getElementById('banner'));
   const popup = createPopup(document.getElementById('popup-root'));
-  const precipScout = createPrecipScout(geo);
+  const precipScout = createPrecipScout(geo, { latestMask: radar.latestMask });
 
   // Shared surface observations: the ticker's temp strip and the director's
   // current-temps map mode read the same feed.

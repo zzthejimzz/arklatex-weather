@@ -3,8 +3,13 @@
 // canvas, weights pixels by intensity (yellow/orange cores count much more
 // than light stratiform), bins them into ~0.2° cells, and clusters the hottest
 // cells into up to 3 points of interest.
+//
+// Raw n0q keeps the clear-air/bug returns that bloom around radar sites at
+// night; the on-air loop masks those with MRMS precip type. The scout reuses
+// the loop's mask grid so it never "tracks precip" the radar isn't showing.
 import { pointInGeometry } from '../utils/geometry.js';
 import { nearestPlace } from '../map/cities.js';
+import { ptypeWetNear } from '../map/radar-loop.js';
 
 const BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913';
 const ZOOM = 7;
@@ -47,7 +52,13 @@ function loadTile(url) {
   });
 }
 
-export function createPrecipScout(geo) {
+/**
+ * @param {object} geo  region file (bbox + hull)
+ * @param {object} [opts]
+ * @param {() => Promise<object|null>} [opts.latestMask]  the radar loop's
+ *        newest MRMS precip-type grid; null/absent = scan unmasked
+ */
+export function createPrecipScout(geo, { latestMask } = {}) {
   let pois = [];
   const hull = { type: 'Polygon', coordinates: [geo.hull] };
 
@@ -74,6 +85,7 @@ export function createPrecipScout(geo) {
         }
       }
       await Promise.all(jobs);
+      const mask = latestMask ? await latestMask().catch(() => null) : null;
 
       const lonLeft = tile2lon(x0, ZOOM);
       const lonRight = tile2lon(x1 + 1, ZOOM);
@@ -93,6 +105,7 @@ export function createPrecipScout(geo) {
           const wgt = pixelWeight(data[o], data[o + 1], data[o + 2]);
           if (wgt < 0.5) continue;
           const lon = lonLeft + (lonRight - lonLeft) * (px / width);
+          if (mask && ptypeWetNear(mask, lon, lat) === false) continue; // clutter, not precip
           const key = `${Math.floor(lon / CELL_DEG)},${Math.floor(lat / CELL_DEG)}`;
           const cell = cells.get(key) ?? { weight: 0, lonSum: 0, latSum: 0 };
           cell.weight += wgt;

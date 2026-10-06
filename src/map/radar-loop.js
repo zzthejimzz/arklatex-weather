@@ -71,6 +71,23 @@ async function loadPtypeGrid(bounds, time) {
   return { cls, w, h, minx, maxy, mpp };
 }
 
+// Is MRMS showing precipitation at (or within `slop` grid px of) a point?
+// null when the point is outside the grid — callers treat that as unknown.
+export function ptypeWetNear(grid, lon, lat, slop = 2) {
+  const gx = Math.floor((mercX(lon) - grid.minx) / grid.mpp);
+  const gy = Math.floor((grid.maxy - mercY(lat)) / grid.mpp);
+  if (gx < 0 || gy < 0 || gx >= grid.w || gy >= grid.h) return null;
+  for (let dy = -slop; dy <= slop; dy++) {
+    const y = gy + dy;
+    if (y < 0 || y >= grid.h) continue;
+    for (let dx = -slop; dx <= slop; dx++) {
+      const x = gx + dx;
+      if (x >= 0 && x < grid.w && grid.cls[y * grid.w + x] !== 0) return true;
+    }
+  }
+  return false;
+}
+
 // Nearest-sample the class grid into a tile's padded source square. Pixels
 // outside the grid read as rain (= unmasked), so edges of wide shots past the
 // mask region just render the way they always have.
@@ -573,5 +590,9 @@ export function createRadarLoop(map, { lowPower = false, maskBounds = null } = {
     }
   }
 
-  return { prewarm, setDim, setHidden };
+  // The newest frame's MRMS grid (or null): lets the precip scout ignore the
+  // same clutter the loop hides, without a second NOAA request.
+  const latestMask = () => getMask(OFFSETS.length - 1);
+
+  return { prewarm, setDim, setHidden, latestMask };
 }
