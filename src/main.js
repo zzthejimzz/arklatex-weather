@@ -36,6 +36,7 @@ import { createPollenLayer } from './map/pollen-layer.js';
 import { createAuroraSource } from './data/aurora.js';
 import { createLunarEclipseSource } from './data/lunar-eclipse.js';
 import { createWarningsYtdSource } from './data/warnings-ytd.js';
+import { createWarningsYtdLayer } from './map/warnings-ytd-layer.js';
 import { addCityLabels } from './map/cities.js';
 import { createBanner } from './ui/banner.js';
 import { createPopup } from './ui/warning-popup.js';
@@ -205,7 +206,8 @@ async function boot() {
 
   // Year-to-date warnings & watches — a quiet-day summary card, from the IEM
   // VTEC archive (static-ish yearly tally, fetched a few times a day).
-  const warningsYtdSource = createWarningsYtdSource();
+  const warningsYtdSource = createWarningsYtdSource({ zones: geo.zones });
+  const warningsYtdLayer = createWarningsYtdLayer(map, geo.zones);
   if (!visualTest) warningsYtdSource.start();
 
   const forecasts = visualTest ? createVisualForecasts() : createCityForecasts();
@@ -268,7 +270,7 @@ async function boot() {
     almanacFeed: almanacSource, frostFeed: frostSource,
     uvFeed: uvSource, aqiFeed: aqiSource,
     pollenLayer, pollenFeed: pollenSource, auroraFeed: auroraSource,
-    eclipseFeed: eclipseSource, warningsYtdFeed: warningsYtdSource,
+    eclipseFeed: eclipseSource, warningsYtdFeed: warningsYtdSource, warningsYtdLayer,
   });
 
   // The chip renders itself from the health registry on its own clock — a
@@ -672,7 +674,10 @@ async function boot() {
     const t = setInterval(() => {
       const data = warningsYtdSource.get();
       if (!data) return;
-      if (forecastPanel.showWarningsYtd(data)) clearInterval(t);
+      if (!forecastPanel.showWarningsYtd(data)) return;
+      clearInterval(t);
+      warningsYtdLayer.show(data);
+      radar.setHidden(true);
     }, 500);
   }
   if (params.has('heat')) {

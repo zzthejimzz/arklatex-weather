@@ -123,7 +123,7 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed, warningsYtdFeed }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed, warningsYtdFeed, warningsYtdLayer }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
@@ -526,6 +526,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     satelliteLayer?.hide();
     rainfallLayer?.hide();
     droughtLayer?.hide();
+    warningsYtdLayer?.hide();
     eroLayer?.hide();
     firewxLayer?.hide();
     cpcLayer?.hide();
@@ -735,14 +736,20 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         return;
       }
       case 'warnings-ytd': {
-        // Quiet-cycle-only feature (gated in buildIdlePlan): ranked hazard
-        // counts for the year so far, from the IEM VTEC archive.
+        // Year-to-date season recap from the IEM VTEC archive: the panel
+        // carries the counts, the map shades each county by storm warnings.
+        // Clean map like the other product shots — the outlook's risk fills
+        // and live radar would muddy the county shading.
         touring = null;
         popup.hide();
         alertsLayer.highlight(null);
         hideChip();
-        outlookLayer.show('day1');
-        if (!forecastPanel?.showWarningsYtd(warningsYtdFeed?.get())) return advance();
+        const ytd = warningsYtdFeed?.get();
+        if (!forecastPanel?.showWarningsYtd(ytd)) return advance();
+        warningsYtdLayer?.show(ytd);
+        outlookLayer.hide();
+        outlookHidden = true;
+        cleanMap();
         fly(regionBounds);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;

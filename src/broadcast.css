@@ -968,27 +968,96 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .aqi-unit { margin-left: 4px; font-size: 14px; font-weight: 600; color: var(--text-muted); }
 .aqi-tip { margin-top: 14px; }
 
-/* Year-to-date warnings & watches page (rides the forecast panel) — a ranked
-   bar per hazard category, each bar carrying that hazard's own map color. */
-.ytd-bars { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }
-.ytd-row {
-  flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 230px 1fr;
-  align-items: center; gap: 14px;
-  border-top: 1px solid var(--border-light);
+/* Year-to-date warnings & watches page (rides the forecast panel): hero total
+   with last year's pace, a tile per hazard (its map color on the top edge —
+   §8: severity drives the edge, never the fill), storm warnings by month as
+   stacked columns, and three standout facts. The map beside it shades each
+   county by storm-warning count (map/warnings-ytd-layer.js). */
+.ytd-hero { margin-top: 10px; padding: 12px 22px; }
+.ytd-hero .an-read b { font-family: var(--font-mono); font-size: 52px; }
+.yh-prev { margin-top: 6px; font-family: var(--font-mono); font-size: 15px; color: var(--text-muted); }
+.yh-prev b { color: var(--text-primary); }
+/* Pace deltas: more = amber, fewer = cyan, same palette as the almanac pills. */
+.yd { font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.yd.up { color: #fbbf24; }
+.yd.down { color: #67e8f9; }
+.yd.even { color: var(--text-muted); }
+.an-pill.yd { font-size: 15px; }
+.an-pill.yd.up { background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); }
+.an-pill.yd.down { background: rgba(34, 211, 238, 0.10); border: 1px solid rgba(34, 211, 238, 0.30); }
+.an-pill.yd.even { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-light); }
+
+.ytd-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+.ytd-tile {
+  display: flex; flex-direction: column; align-items: flex-start;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-top: 3px solid var(--hz, var(--accent-cyan));
+  border-radius: 12px;
+  padding: 10px 12px 10px;
 }
-.yr-label { display: flex; align-items: center; gap: 10px; font-size: 16px; font-weight: 600; }
-.yr-label svg.icon { width: var(--icon-size-sm); height: var(--icon-size-sm); flex: none; }
-/* Color rides the icon only — the category name stays in plain text ink, same
-   rule the map legends already follow (a swatch carries identity, not the label). */
-.yr-name { line-height: 1.2; color: var(--text-primary); }
-.yr-track { position: relative; height: 24px; }
-.yr-bar {
-  height: 20px; border-radius: 0 4px 4px 0; min-width: 34px;
-  display: flex; align-items: center; justify-content: flex-end; padding-right: 10px;
+.ytd-tile.days { --hz: var(--accent-cyan); }
+.yt-head { display: flex; align-items: center; gap: 6px; color: var(--hz, var(--accent-cyan)); }
+.yt-head svg.icon { width: var(--icon-size-sm); height: var(--icon-size-sm); flex: none; }
+.yt-head span {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
+  color: var(--text-muted);
 }
-.yr-bar b { font-family: var(--font-mono); font-size: 15px; font-weight: 700; }
-.ytd-updated { margin-top: 10px; }
+.yt-num { font-family: var(--font-mono); font-size: 44px; font-weight: 700; line-height: 1.1; margin: 6px 0 2px; }
+.yt-foot { min-height: 18px; }
+
+.ytd-months {
+  flex: 1; min-height: 110px; max-height: 230px;
+  display: flex; gap: 8px; padding: 26px 4px 0;
+}
+.ym-col { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.ym-bar {
+  flex: 1; display: flex; align-items: flex-end;
+  border-bottom: 2px solid var(--border);
+}
+.ym-stack { position: relative; width: 100%; display: flex; flex-direction: column; }
+.ym-stack i { display: block; min-height: 2px; }
+.ym-stack i:first-of-type { border-radius: 4px 4px 0 0; }
+.ym-val {
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  font-family: var(--font-mono); font-size: 15px; font-weight: 700; white-space: nowrap;
+}
+.ym-lab {
+  margin-top: 6px; text-align: center;
+  font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--text-muted);
+}
+.ym-col.now .ym-lab { color: var(--accent-cyan); font-weight: 800; }
+.ym-col.future .ym-lab { color: var(--text-faint); }
+.ytd-key {
+  display: flex; align-items: center; gap: 14px; margin-top: 10px;
+  font-family: var(--font-mono); font-size: 13px; color: var(--text-muted);
+}
+.ytd-key span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.ytd-key i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
+.ytd-key .yk-map { margin-left: auto; }
+.ytd-key .yk-map i { width: 54px; height: 11px; border: 1px solid rgba(34, 211, 238, 0.4); }
+
+.ytd-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.ytd-fact {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 0;
+}
+.yf-label {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
+  white-space: nowrap;
+}
+.yf-val { margin-top: 4px; font-size: 21px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yf-val.mono { font-family: var(--font-mono); }
+.yf-sub { margin-top: 2px; font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); }
+
+/* Map chips on the three most-warned counties (temp-chip shell). */
+.ytd-chip { border-color: rgba(34, 211, 238, 0.55); }
+.ytd-chip b { font-family: var(--font-mono); color: var(--accent-cyan); }
 
 /* Pollen page (rides the forecast panel) + pollen map chips */
 /* IQVIA category bands: 2.4 / 4.8 / 7.2 / 9.6 of 12 = every 20%. */
