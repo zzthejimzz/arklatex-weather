@@ -194,16 +194,44 @@ const SmoothRadarLayer = L.GridLayer.extend({
     this._outputScale = options.outputScale ?? 2;
   },
 
+  // New data without a blank: every painted tile re-renders where it sits, so
+  // the old picture stays on air until the new one replaces it in a single
+  // putImageData. (redraw() empties the grid first — that blanked the whole
+  // loop for seconds at every 5-minute refresh.) Tiles still on their first
+  // render finish it, then re-render once with the new source.
+  refreshInPlace() {
+    for (const { el, coords, loaded } of Object.values(this._tiles)) {
+      if (!loaded) {
+        el._stale = true;
+        continue;
+      }
+      el._gen = (el._gen || 0) + 1;
+      this._rerender(coords, el, el._gen, 0);
+    }
+  },
+
   setUrl(url) {
     this._url = url;
-    this.redraw();
+    this.refreshInPlace();
+  },
+
+  _rerender(coords, tile, gen, tryNo) {
+    const again = () => {
+      if (tryNo < TILE_RETRIES) {
+        setTimeout(() => {
+          if (tile.isConnected && tile._gen === gen) this._rerender(coords, tile, gen, tryNo + 1);
+        }, TILE_RETRY_MS * (tryNo + 1));
+      }
+    };
+    // A failure keeps the previous picture on air — stale beats blank.
+    this._render(coords, tile, gen).then((complete) => { if (!complete) again(); }, again);
   },
 
   // Leaflet's redraw() takes the map's raw zoom as the tile zoom, unlike its
   // own view updates which round it. With zoomSnap: 0 the map sits at zooms
-  // like 8.6, so every redraw (the 5-minute refresh, a late MRMS mask) built
-  // bogus /8.6/ tile URLs and left the frame blank until the next camera move
-  // re-rounded it. Mirror the rounding Leaflet's _setView does.
+  // like 8.6, so a redraw built bogus /8.6/ tile URLs and left the frame blank
+  // until the next camera move re-rounded it. Refreshes now re-render in place
+  // instead, but keep any redraw() safe. Mirror the rounding _setView does.
   redraw() {
     if (!this._map) return this;
     this._removeAllTiles();
@@ -249,6 +277,13 @@ const SmoothRadarLayer = L.GridLayer.extend({
       this._render(coords, tile).then(
         (complete) => {
           announce();
+          if (tile._stale) {
+            // A refresh/mask landed mid-render: this paint used the old source.
+            tile._stale = false;
+            tile._gen = (tile._gen || 0) + 1;
+            this._rerender(coords, tile, tile._gen, 0);
+            return;
+          }
           // A neighbor strip failed → seam at that tile edge. The canvas
           // stays live in the DOM, so a later re-render heals it in place.
           if (!complete && tryNo < TILE_RETRIES) {
@@ -270,7 +305,9 @@ const SmoothRadarLayer = L.GridLayer.extend({
     return tile;
   },
 
-  async _render(coords, tile) {
+  // `gen` (in-place re-renders only): skip the paint if a newer re-render of
+  // this tile has started, so a slow stale render can't land on top of it.
+  async _render(coords, tile, gen) {
     const z = coords.z;
     const n = 2 ** z;
     const radius = blurRadiusForZoom(z);
@@ -325,9 +362,10 @@ const SmoothRadarLayer = L.GridLayer.extend({
     // raw would put the error graphic on air, so treat it like any other
     // fetch failure: let the caller retry, empty tile beats a broken one.
     // Don't hold first paint hostage to NOAA: past the wait, render unmasked
-    // and let the loop redraw this frame once the mask lands.
+    // and let the loop re-render this frame in place once the mask lands.
     const grid = await Promise.race([maskP, new Promise((r) => setTimeout(r, MASK_WAIT_MS))]);
     if (grid === undefined) this._maskMissed = true;
+    if (gen !== undefined && tile._gen !== gen) return true; // superseded
     renderRadarTile(padded, pad, tile, radius, grid ? sampleMask(grid, coords, pad, S) : null);
     return loaded.length === slots.length; // false = a neighbor missing (seam risk)
   },
@@ -373,7 +411,7 @@ export function createRadarLoop(map, { lowPower = false, maskBounds = null } = {
           const f = frames[i];
           if (gen === masks && f._maskMissed) {
             f._maskMissed = false;
-            f.redraw(); // some tiles painted unmasked while this was in flight
+            f.refreshInPlace(); // some tiles painted unmasked while this was in flight
           }
           return grid;
         },
@@ -468,7 +506,16 @@ export function createRadarLoop(map, { lowPower = false, maskBounds = null } = {
 
   setInterval(() => {
     if (moving || Date.now() < nextAt) return;
-    fadeTo((idx + 1) % frames.length);
+    // Never cut to a frame that's still building tiles (startup, a refresh's
+    // first render, a pan onto new ground) — that's a blank on air. Skip ahead
+    // to the next ready frame, or hold the current one.
+    for (let k = 1; k < frames.length; k++) {
+      const j = (idx + k) % frames.length;
+      if (!frames[j].isLoading()) {
+        fadeTo(j);
+        break;
+      }
+    }
     nextAt = Date.now() + (idx === frames.length - 1 ? HOLD_NEWEST_MS : FRAME_MS);
   }, 100);
 
