@@ -7,7 +7,7 @@ import { tempColor, rampGradient } from '../map/temps-layer.js';
 import { moonInfo, nextPhases } from '../utils/moon.js';
 import { sunInfo } from '../utils/sun.js';
 import { LOCAL_THRESHOLD } from '../data/aurora.js';
-import { textColorFor } from '../utils/alert-style.js';
+import { ytdStyle, ytdRange } from '../map/warnings-ytd-layer.js';
 import { icon } from './icons.js';
 
 // Sun & Daylight anchor: Shreveport-ish center of the CWA. Sunrise/sunset vary
@@ -475,35 +475,105 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
-  // Year-to-date warnings & watches — a ranked bar per hazard category, from
-  // the IEM VTEC archive (data/warnings-ytd.js). Genuinely quiet-day filler:
-  // nothing else in the rotation summarizes the season the way this does.
+  // Year-to-date warnings & watches, from the IEM VTEC archive
+  // (data/warnings-ytd.js): a hero total with last year's pace, one tile per
+  // hazard, the season's shape by month, and three standout facts. The map
+  // beside it (map/warnings-ytd-layer.js) shows where the storm warnings hit.
+  const MONTH_INITIALS = 'JFMAMJJASOND';
+  function ytdDelta(cur, prev, { pct = false, suffix = '' } = {}) {
+    if (prev == null) return '';
+    const diff = cur - prev;
+    if (diff === 0) return `<span class="yd even">even${suffix}</span>`;
+    const amt = pct && prev > 0 ? `${Math.round(Math.abs(diff) / prev * 100)}%` : Math.abs(diff);
+    return `<span class="yd ${diff > 0 ? 'up' : 'down'}">${diff > 0 ? '▲' : '▼'} ${amt}${suffix}</span>`;
+  }
+
   function showWarningsYtd(data) {
     if (!data?.categories?.length) return false;
-    const max = Math.max(...data.categories.map(c => c.count), 1);
-    const rows = data.categories.map(c => {
-      const pct = Math.round((c.count / max) * 100);
+    const by = Object.fromEntries(data.categories.map(c => [c.key, c]));
+    const lastYr = `'${String(data.year - 1).slice(2)}`;
+
+    const tiles = data.categories.map(c => `
+      <div class="ytd-tile" style="--hz:${c.color}">
+        <div class="yt-head">${c.iconHtml}<span>${c.label}</span></div>
+        <div class="yt-num">${c.count}</div>
+        <div class="yt-foot">${ytdDelta(c.count, c.prev, { suffix: ` vs ${lastYr}` })}</div>
+      </div>`).join('') + `
+      <div class="ytd-tile days">
+        <div class="yt-head">${icon('calendar')}<span>Warning Days</span></div>
+        <div class="yt-num">${data.warnDays}</div>
+        <div class="yt-foot">${ytdDelta(data.warnDays, data.prevWarnDays, { suffix: ` vs ${lastYr}` })}</div>
+      </div>`;
+
+    // Storm warnings by month, stacked severe → flash flood → tornado.
+    const totals = data.months.map(m => m.svr + m.ffw + m.tor);
+    const peak = Math.max(...totals, 1);
+    const peakIdx = totals.indexOf(Math.max(...totals));
+    const cols = data.months.map((m, i) => {
+      const future = i > data.monthNow;
+      const seg = (n, key) => n ? `<i style="flex:${n};background:${by[key].color}"></i>` : '';
+      const cls = ['ym-col', future && 'future', i === data.monthNow && 'now', i === peakIdx && totals[i] > 0 && 'peak']
+        .filter(Boolean).join(' ');
       return `
-        <div class="ytd-row">
-          <div class="yr-label" style="color:${c.color}">${c.iconHtml}<span class="yr-name">${c.label}</span></div>
-          <div class="yr-track">
-            <div class="yr-bar" style="width:${pct}%;background:${c.color}">
-              <b style="color:${textColorFor(c.color)}">${c.count}</b>
+        <div class="${cls}">
+          <div class="ym-bar">
+            <div class="ym-stack" style="height:${future ? 0 : Math.max(totals[i] ? 3 : 0, (totals[i] / peak) * 100)}%">
+              ${i === peakIdx && totals[i] > 0 ? `<div class="ym-val">${totals[i]}</div>` : ''}
+              ${seg(m.tor, 'tor')}${seg(m.ffw, 'ffw')}${seg(m.svr, 'svr')}
             </div>
           </div>
+          <div class="ym-lab">${MONTH_INITIALS[i]}</div>
         </div>`;
     }).join('');
+    const key = ['svr', 'ffw', 'tor'].map(k =>
+      `<span><i style="background:${by[k].color}"></i>${by[k].label}</span>`).join('');
+
+    const top = data.top[0];
+    const torDays = data.lastTornado
+      ? Math.floor((Date.now() - Date.parse(data.lastTornado)) / 86_400_000) : null;
+    const facts = [
+      data.busiest && { label: 'Busiest Day', val: data.busiest.date, mono: true, sub: `${data.busiest.count} storm warnings` },
+      top && { label: 'Most Warned', val: `${top.name}${top.state ? `, ${top.state}` : ''}`, sub: `${top.count} storm warnings` },
+      data.lastTornado && {
+        label: 'Last Tornado Warning',
+        mono: true,
+        val: formatDate(new Date(data.lastTornado)).replace(/^\w+, /, ''),
+        sub: torDays === 0 ? 'today' : `${torDays} day${torDays === 1 ? '' : 's'} ago`,
+      },
+    ].filter(Boolean).map(f => `
+      <div class="ytd-fact">
+        <div class="yf-label">${f.label}</div>
+        <div class="yf-val${f.mono ? ' mono' : ''}">${f.val}</div>
+        <div class="yf-sub">${f.sub}</div>
+      </div>`).join('');
+
+    // Map legend: the county ramp composited on the basemap tone, with the
+    // fewest/most warned counts at its ends.
+    const [lo, hi] = ytdRange(data.counties);
+    const ramp = [0, 0.25, 0.5, 0.75, 1].map(t => {
+      const f = ytdStyle(lo + t * (hi - lo), lo, hi) ?? { color: 'rgb(0,0,0)', opacity: 0 };
+      const [r, g, b] = f.color.match(/\d+/g).map(Number);
+      const over = (c) => Math.round(c * f.opacity + 0x59 * (1 - f.opacity)); // land #595959
+      return `rgb(${over(r)}, ${over(g)}, ${over(b)}) ${t * 100}%`;
+    }).join(', ');
+
     root.innerHTML = `
       <div class="fc-head">
         <div class="fc-title">${icon('chart')} ${data.year} <span class="grad">Warnings &amp; Watches</span></div>
-        <div class="fc-sub">SHV County Warning Area · since Jan 1, ${data.year} · IEM VTEC archive</div>
+        <div class="fc-sub">NWS Shreveport area · Jan 1 – ${formatDate(new Date()).replace(/^\w+, /, '')}</div>
       </div>
-      <div class="alm-now">
-        <div class="an-label">Total Issued This Year</div>
-        <div class="an-read"><b>${data.total}</b><span class="an-pill even">events</span></div>
+      <div class="alm-now ytd-hero">
+        <div>
+          <div class="an-label">Issued This Year</div>
+          ${data.prevTotal != null ? `<div class="yh-prev">${data.year - 1} at this date: <b>${data.prevTotal}</b></div>` : ''}
+        </div>
+        <div class="an-read"><b>${data.total}</b>${ytdDelta(data.total, data.prevTotal, { pct: true, suffix: ' pace' }).replace('class="yd', 'class="an-pill yd')}</div>
       </div>
-      <div class="ytd-bars">${rows}</div>
-      <div class="fc-sub ytd-updated">Updated ${formatLocalTime(data.updated)}</div>`;
+      <div class="ytd-tiles">${tiles}</div>
+      <div class="alm-sec">Storm warnings by month</div>
+      <div class="ytd-months">${cols}</div>
+      <div class="ytd-key">${key}<span class="yk-map">${lo}<i style="background:linear-gradient(90deg, ${ramp})"></i>${hi} per county</span></div>
+      <div class="ytd-facts">${facts}</div>`;
     stage.classList.add('forecast-open');
     root.classList.add('open');
     map.invalidateSize({ animate: false });
