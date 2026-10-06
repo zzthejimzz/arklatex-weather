@@ -17,36 +17,56 @@ for (const [dbz, r, g, b] of N0Q_LUT) {
   if (!RGB_TO_DBZ.has(k) || dbz > RGB_TO_DBZ.get(k)) RGB_TO_DBZ.set(k, dbz);
 }
 
-// ---- broadcast palette -------------------------------------------------------
+// ---- broadcast palettes ------------------------------------------------------
 // Tuned against the grey basemap (land #595959). Alpha scales with intensity:
 // drizzle stays translucent so towns read through it, cores go near-solid.
+// Color blends continuously (consumer-app look) rather than in 5-dBZ bins.
 // [dBZ, r, g, b, alpha]
-const STOPS = [
-  [15, 8, 82, 46, 0.0], // fade-in starts here — anything weaker is invisible
-  [20, 22, 138, 66, 0.55],
-  [30, 74, 208, 86, 0.8],
-  [37, 250, 214, 40, 0.88],
-  [45, 255, 140, 22, 0.92],
-  [52, 236, 42, 32, 0.94],
-  [60, 152, 12, 22, 0.95],
-  [65, 224, 66, 240, 0.95],
-  [72, 255, 168, 255, 0.95],
-  [78, 255, 255, 255, 0.96],
+//
+// Rain: TV-style mint → deep green → yellow → red up to 50 dBZ, so everyday
+// rain stays calm on a 24/7 stream; above that, RadarScope-style hue steps
+// (dark red → magenta → purple → white) so hail cores show structure on
+// warning zooms instead of fading into one pink.
+const RAIN_STOPS = [
+  [15, 90, 200, 110, 0.0], // fade-in starts here — anything weaker is invisible
+  [18, 110, 215, 120, 0.45],
+  [25, 60, 180, 70, 0.7],
+  [32, 20, 130, 40, 0.82],
+  [38, 245, 225, 30, 0.9],
+  [44, 250, 150, 20, 0.92],
+  [50, 240, 30, 25, 0.94],
+  [55, 190, 5, 10, 0.95],
+  [60, 255, 0, 220, 0.95],
+  [65, 150, 40, 255, 0.96],
+  [70, 255, 255, 255, 0.96],
 ];
 
-// Precomputed palette at half-dBZ resolution: index = dbz*2 + 64 (-32 → 0).
+// Snow: icy blue → deep blue → violet. Snow returns run ~10–20 dBZ weaker
+// than rain at the same intensity, so the ramp starts and saturates lower.
+const SNOW_STOPS = [
+  [8, 190, 225, 255, 0.0],
+  [12, 175, 215, 255, 0.5],
+  [20, 110, 170, 250, 0.72],
+  [28, 50, 110, 235, 0.85],
+  [35, 30, 60, 195, 0.92],
+  [42, 125, 70, 210, 0.94],
+  [50, 235, 205, 255, 0.95],
+];
+
+// Precomputed palettes at half-dBZ resolution: index = dbz*2 + 64 (-32 → 0).
 const PAL_N = 256;
-const PAL_R = new Uint8Array(PAL_N);
-const PAL_G = new Uint8Array(PAL_N);
-const PAL_B = new Uint8Array(PAL_N);
-const PAL_A = new Uint8Array(PAL_N);
+const newPal = () => ({
+  r: new Uint8Array(PAL_N), g: new Uint8Array(PAL_N), b: new Uint8Array(PAL_N), a: new Uint8Array(PAL_N),
+});
+const RAIN = newPal();
+const SNOW = newPal();
 
 // Interpolated [r, g, b, alpha] at an exact dBZ value.
-function evalStops(dbz) {
-  let s = STOPS.length - 1;
-  while (s > 0 && STOPS[s][0] > dbz) s--;
-  const a0 = STOPS[s];
-  const a1 = STOPS[Math.min(s + 1, STOPS.length - 1)];
+function evalStops(stops, dbz) {
+  let s = stops.length - 1;
+  while (s > 0 && stops[s][0] > dbz) s--;
+  const a0 = stops[s];
+  const a1 = stops[Math.min(s + 1, stops.length - 1)];
   const t = a1[0] === a0[0] ? 0 : Math.max(0, Math.min(1, (dbz - a0[0]) / (a1[0] - a0[0])));
   return [
     a0[1] + (a1[1] - a0[1]) * t,
@@ -56,19 +76,32 @@ function evalStops(dbz) {
   ];
 }
 
-// Color snaps to the floor of its band (classic stepped NEXRAD bins) so every
-// intensity jump reads as a crisp boundary on stream; alpha stays continuous
-// so light rain still fades in and storm edges stay soft.
-const BAND_DBZ = 5;
-for (let i = 0; i < PAL_N; i++) {
-  const dbz = (i - 64) / 2;
-  if (dbz <= STOPS[0][0]) continue; // transparent below the first stop
-  const [r, g, b] = evalStops(Math.floor(dbz / BAND_DBZ) * BAND_DBZ);
-  PAL_R[i] = Math.round(r);
-  PAL_G[i] = Math.round(g);
-  PAL_B[i] = Math.round(b);
-  PAL_A[i] = Math.round(evalStops(dbz)[3] * 255);
+// Alpha is continuous so light rain fades in and storm edges stay soft.
+function fillPalette(pal, stops) {
+  for (let i = 0; i < PAL_N; i++) {
+    const dbz = (i - 64) / 2;
+    if (dbz <= stops[0][0]) continue; // transparent below the first stop
+    const [r, g, b, a] = evalStops(stops, dbz);
+    pal.r[i] = Math.round(r);
+    pal.g[i] = Math.round(g);
+    pal.b[i] = Math.round(b);
+    pal.a[i] = Math.round(a * 255);
+  }
 }
+fillPalette(RAIN, RAIN_STOPS);
+fillPalette(SNOW, SNOW_STOPS);
+
+// Dev hook (test-radar.html ?ptype=snow): paint every masked echo as snow so
+// the winter palette can be judged on a rain day.
+let forceSnow = false;
+export function setForceSnow(on) {
+  forceSnow = on;
+}
+
+// Precip-type classes in the mask grid radar-loop.js builds from MRMS.
+export const PTYPE_DRY = 0;
+export const PTYPE_RAIN = 1;
+export const PTYPE_SNOW = 2;
 
 // n0q source raster is ~0.0108°/px; melt blocks once they span multiple tile
 // pixels. Radius is in source-tile pixels.
@@ -110,8 +143,10 @@ const MIN_DECODE_DBZ = 5; // ignore clear-air/clutter returns entirely
  * @param {number} pad     padding in source pixels (must be ≥ 2·radius)
  * @param {HTMLCanvasElement} out     Destination tile canvas (256 or 512 px)
  * @param {number} radius  box-blur radius in source pixels
+ * @param {Uint8Array|null} mask  S×S PTYPE_* classes in the same padded pixel
+ *        space, or null to render unmasked (all rain)
  */
-export function renderRadarTile(padded, pad, out, radius) {
+export function renderRadarTile(padded, pad, out, radius, mask = null) {
   const S = padded.width;
   const src = padded.getContext('2d', { willReadFrequently: true });
   const img = src.getImageData(0, 0, S, S).data;
@@ -120,8 +155,28 @@ export function renderRadarTile(padded, pad, out, radius) {
   const cov = new Float32Array(S * S);
   const tmp = new Float32Array(S * S);
 
+  // Mask → precip presence + snow flag, both blurred. Presence is dilated (any
+  // precip nearby keeps an echo) to absorb the coarse 1 km grid and the few
+  // minutes between MRMS and n0q timestamps; the snow/presence ratio blends
+  // rain→snow smoothly across the transition line instead of a hard seam.
+  let wet = null;
+  let snow = null;
+  if (mask) {
+    wet = new Float32Array(S * S);
+    snow = new Float32Array(S * S);
+    for (let p = 0; p < wet.length; p++) {
+      if (mask[p] === PTYPE_DRY) continue;
+      wet[p] = 1;
+      if (forceSnow || mask[p] === PTYPE_SNOW) snow[p] = 1;
+    }
+    const dil = Math.max(3, radius);
+    boxBlur(wet, tmp, S, S, dil);
+    boxBlur(snow, tmp, S, S, dil);
+  }
+
   for (let p = 0, i = 0; p < field.length; p++, i += 4) {
     if (img[i + 3] === 0) continue;
+    if (wet && wet[p] < 0.01) continue; // MRMS sees no precip here: clutter/bugs
     const dbz = RGB_TO_DBZ.get((img[i] << 16) | (img[i + 1] << 8) | img[i + 2]);
     if (dbz === undefined || dbz < MIN_DECODE_DBZ) continue;
     field[p] = dbz;
@@ -166,13 +221,24 @@ export function renderRadarTile(padded, pad, out, radius) {
 
       const dbz = f / c; // normalized convolution — true local mean dBZ
       const pi = Math.max(0, Math.min(PAL_N - 1, Math.round(dbz * 2) + 64));
-      const a = PAL_A[pi];
-      if (a === 0) continue;
+      let r = RAIN.r[pi];
+      let g = RAIN.g[pi];
+      let b = RAIN.b[pi];
+      let a = RAIN.a[pi];
+      const sf = snow && wet[i00] > 0 ? Math.min(1, snow[i00] / wet[i00]) : 0;
+      if (sf > 0) {
+        const rf = 1 - sf;
+        r = r * rf + SNOW.r[pi] * sf;
+        g = g * rf + SNOW.g[pi] * sf;
+        b = b * rf + SNOW.b[pi] * sf;
+        a = a * rf + SNOW.a[pi] * sf;
+      }
+      if (a < 1) continue;
 
       const oi = (oy * OUT + ox) * 4;
-      o[oi] = PAL_R[pi];
-      o[oi + 1] = PAL_G[pi];
-      o[oi + 2] = PAL_B[pi];
+      o[oi] = r;
+      o[oi + 1] = g;
+      o[oi + 2] = b;
       // soften storm edges: fade by coverage before full opacity kicks in
       o[oi + 3] = c >= 0.5 ? a : Math.round(a * (c - 0.04) * (1 / 0.46));
     }

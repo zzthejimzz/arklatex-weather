@@ -42,7 +42,8 @@ fire-weather/tropical ramps when one of those is on air) → **animated NEXRAD
 loop** (30-min window, 7 frames, always in motion, cache re-busted every
 5 min; tiles decode to true dBZ via the baked IEM lookup table, get smoothed
 in data space with neighbor-tile padding, and repaint through a broadcast
-palette with intensity-scaled alpha; frames crossfade — `src/map/radar-render.js`,
+palette with intensity-scaled alpha; an MRMS precip-type grid per frame masks
+out clear-air/bug clutter and paints snow in a blue palette; frames crossfade — `src/map/radar-render.js`,
 test with `/test-radar.html?v=lat,lon,zoom`) → white state borders → SPC
 mesoscale discussions (dashed cyan) → watches (dashed) → warning polygons →
 curated city/town labels (own the overview zoom band < 8.45; GL labels take
@@ -109,6 +110,7 @@ control.
 | spc.noaa.gov outlook GeoJSON | Day 1–3 categorical outlooks (dev-proxied in `vite.config.js`) |
 | spc.noaa.gov storm reports | tornado/wind/hail report tour stops |
 | mesonet.agron.iastate.edu (IEM) | NEXRAD radar tiles · SPC MCD polygons · GOES satellite tiles · MRMS rainfall LUT source |
+| opengeo.ncep.noaa.gov (MRMS WMS) | precip type per radar frame: clutter mask + snow coloring (Akamai-fronted — one serialized regional GetMap per frame, never tiled) |
 | NHC (nhc.noaa.gov) | active tropical cyclone track/cone, basin development areas |
 | NOAA WPC | Excessive Rainfall Outlook (ERO) GeoJSON, Day1–5 |
 | NOAA CPC (ArcGIS MapServer) | 6–10 day & 8–14 day temperature/precipitation outlooks |

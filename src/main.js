@@ -99,7 +99,11 @@ async function boot() {
   const map = createBroadcastMap(document.getElementById('map'), geo.bbox);
   addStateBorders(map);
   addCityLabels(map);
-  const radar = createRadarLoop(map, { lowPower: vpsMode });
+  // MRMS precip-type mask covers the director's widest shots (wideBounds pad).
+  const radar = createRadarLoop(map, {
+    lowPower: vpsMode,
+    maskBounds: L.latLngBounds(boundsToLeaflet(geo.bbox)).pad(1.6),
+  });
   const velocityLayer = createVelocityLayer(map);
   const mcdLayer = createMcdLayer(map);
 

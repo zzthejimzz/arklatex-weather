@@ -7,10 +7,13 @@
 // decode to exact dBZ via the baked IEM lookup table, the dBZ field is
 // smoothed in data space (with neighbor-tile padding so storms never show
 // seams), and repainted through our broadcast palette — translucent greens
-// for light rain, near-solid cores. Frames crossfade instead of hard-cutting.
+// for light rain, near-solid cores. An MRMS precip-type grid per frame drops
+// non-precip clutter and switches snow to its own palette. Frames crossfade
+// instead of hard-cutting.
 import L from 'leaflet';
-import { renderRadarTile, blurRadiusForZoom } from './radar-render.js';
+import { renderRadarTile, blurRadiusForZoom, PTYPE_RAIN, PTYPE_SNOW } from './radar-render.js';
 import { track } from '../utils/health.js';
+import { fetchWithTimeout } from '../utils/net.js';
 
 const BASE = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-900913';
 const OFFSETS = ['-m30m', '-m25m', '-m20m', '-m15m', '-m10m', '-m05m', '']; // oldest → newest
@@ -21,6 +24,77 @@ const REFRESH_MS = 5 * 60 * 1000;
 const OPACITY = 1; // the palette carries per-intensity transparency
 const MAX_ZOOM = 14; // IEM serves n0q tiles through z14 (verified)
 const TILE_SIZE = 256;
+
+// MRMS precipitation type (NOAA opengeo WMS — CORS-open, 2-minute steps,
+// ~2 h of history). It doubles as a QC mask: MRMS drops the clear-air/bug
+// returns that bloom around every NEXRAD site at night, which raw n0q keeps.
+// It also flags snow, so winter echoes get their own palette.
+// Akamai in front of opengeo 403s bursts (a few parallel GetMaps trip it, and
+// its 403 carries no CORS header), so never tile it: one regional image per
+// loop frame — 7 requests per 5-minute refresh — decoded once into a 1-byte
+// class grid that every tile samples. Failures stay failed until the next
+// refresh (render unmasked) so an outage can't turn into a retry storm.
+const MASK_WMS = 'https://opengeo.ncep.noaa.gov/geoserver/conus/conus_pcpn_typ/ows';
+const MASK_PX = 2048; // long side; ~0.8 km/px over the wide region ≈ MRMS's 1 km grid
+const MASK_SNOW_RGB = (200 << 16) | (200 << 8) | 200; // legend "S"; every other color is rain or hail
+const N0Q_META = 'https://mesonet.agron.iastate.edu/data/gis/images/4326/USCOMP/n0q_0.json';
+const MERC = 20037508.342789244;
+const FRAME_LAG_MIN = OFFSETS.map((o) => (o ? parseInt(o.slice(2), 10) : 0));
+
+const mercX = (lon) => (lon * MERC) / 180;
+const mercY = (lat) => (Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) * MERC) / Math.PI;
+
+async function loadPtypeGrid(bounds, time) {
+  const minx = mercX(bounds.getWest());
+  const maxx = mercX(bounds.getEast());
+  const miny = mercY(bounds.getSouth());
+  const maxy = mercY(bounds.getNorth());
+  const mpp = Math.max(maxx - minx, maxy - miny) / MASK_PX;
+  const w = Math.round((maxx - minx) / mpp);
+  const h = Math.round((maxy - miny) / mpp);
+  const url = `${MASK_WMS}?service=WMS&version=1.3.0&request=GetMap&layers=conus_pcpn_typ&styles=` +
+    `&crs=EPSG:3857&bbox=${minx},${miny},${maxx},${maxy}&width=${w}&height=${h}` +
+    `&format=image/png&transparent=true&time=${time}`;
+  const img = await loadImage(url, null);
+  imgCache.delete(url); // decoded below; don't pin a ~16 MB bitmap in the tile cache
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const px = ctx.getImageData(0, 0, w, h).data;
+  const cls = new Uint8Array(w * h);
+  for (let p = 0, i = 0; p < cls.length; p++, i += 4) {
+    if (px[i + 3] === 0) continue;
+    cls[p] = ((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]) === MASK_SNOW_RGB ? PTYPE_SNOW : PTYPE_RAIN;
+  }
+  return { cls, w, h, minx, maxy, mpp };
+}
+
+// Nearest-sample the class grid into a tile's padded source square. Pixels
+// outside the grid read as rain (= unmasked), so edges of wide shots past the
+// mask region just render the way they always have.
+function sampleMask(grid, coords, pad, S) {
+  const n = 2 ** coords.z;
+  const span = (2 * MERC) / n / 256; // meters per source pixel
+  const ox = (((coords.x % n) + n) % n) * 256 - pad;
+  const oy = coords.y * 256 - pad;
+  const gx0 = (-MERC + ox * span - grid.minx) / grid.mpp;
+  const gy0 = (grid.maxy - (MERC - oy * span)) / grid.mpp;
+  const step = span / grid.mpp;
+  const gEnd = (g) => g + S * step;
+  if (gEnd(gx0) < 0 || gx0 >= grid.w || gEnd(gy0) < 0 || gy0 >= grid.h) return null;
+  const out = new Uint8Array(S * S);
+  for (let y = 0; y < S; y++) {
+    const gy = Math.floor(gy0 + (y + 0.5) * step);
+    const inY = gy >= 0 && gy < grid.h;
+    for (let x = 0; x < S; x++) {
+      const gx = Math.floor(gx0 + (x + 0.5) * step);
+      out[y * S + x] = inY && gx >= 0 && gx < grid.w ? grid.cls[gy * grid.w + gx] : PTYPE_RAIN;
+    }
+  }
+  return out;
+}
 
 // Shared image cache. Every tile render pulls its 8 neighbors — which are
 // other tiles' centers — and the director prewarms fly destinations, so the
@@ -64,10 +138,10 @@ function isErrorTile(img) {
   }
 }
 
-function loadImage(url) {
+function loadImage(url, beat = tileBeat) {
   let p = imgCache.get(url);
   if (p) return p;
-  tileBeat.attempt();
+  beat?.attempt();
   p = new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -83,7 +157,7 @@ function loadImage(url) {
         reject(new Error('IEM error tile'));
         return;
       }
-      tileBeat.ok();
+      beat?.ok();
       resolve(img);
     };
     img.onerror = (e) => {
@@ -109,12 +183,14 @@ function loadImage(url) {
 // Failures aren't sticky in imgCache, so retrying re-fetches just the misses.
 const TILE_RETRIES = 3;
 const TILE_RETRY_MS = 1500;
+const MASK_WAIT_MS = 6000; // longest a tile waits on the MRMS mask before painting unmasked
 const NEIGHBOR_GRACE_MS = 350; // after the center lands, how long to hold first paint for neighbors
 
 const SmoothRadarLayer = L.GridLayer.extend({
   initialize(url, options) {
     L.GridLayer.prototype.initialize.call(this, options);
     this._url = url;
+    this._getMask = options.getMask ?? (() => Promise.resolve(null));
     this._outputScale = options.outputScale ?? 2;
   },
 
@@ -178,6 +254,8 @@ const SmoothRadarLayer = L.GridLayer.extend({
     const pad = 2 * radius + 2; // blur reach (two passes) must stay inside
     const url = (x, y) =>
       this._url.replace('{z}', z).replace('{x}', ((x % n) + n) % n).replace('{y}', y);
+    const S = 256 + 2 * pad;
+    const maskP = this._getMask(); // same promise for every tile of this frame
 
     // Center tile + all 8 neighbors (HTTP cache makes the overlap ~free —
     // each neighbor is also some other tile's center). Only the center is
@@ -209,7 +287,6 @@ const SmoothRadarLayer = L.GridLayer.extend({
     await Promise.race([all, new Promise((r) => setTimeout(r, NEIGHBOR_GRACE_MS))]);
     const loaded = slots.filter((s) => s.img);
 
-    const S = 256 + 2 * pad;
     const padded = document.createElement('canvas');
     padded.width = S;
     padded.height = S;
@@ -224,16 +301,74 @@ const SmoothRadarLayer = L.GridLayer.extend({
     // orange tile with error text), not a normal cached tile. Drawing that
     // raw would put the error graphic on air, so treat it like any other
     // fetch failure: let the caller retry, empty tile beats a broken one.
-    renderRadarTile(padded, pad, tile, radius);
+    // Don't hold first paint hostage to NOAA: past the wait, render unmasked
+    // and let the loop redraw this frame once the mask lands.
+    const grid = await Promise.race([maskP, new Promise((r) => setTimeout(r, MASK_WAIT_MS))]);
+    if (grid === undefined) this._maskMissed = true;
+    renderRadarTile(padded, pad, tile, radius, grid ? sampleMask(grid, coords, pad, S) : null);
     return loaded.length === slots.length; // false = a neighbor missing (seam risk)
   },
 });
 
-export function createRadarLoop(map, { lowPower = false } = {}) {
+export function createRadarLoop(map, { lowPower = false, maskBounds = null } = {}) {
   const url = (i, ts) => `${BASE}${OFFSETS[i]}/{z}/{x}/{y}.png?_ts=${ts}`;
   const outputScale = lowPower ? 1 : 2;
 
   let ts = Date.now();
+  // Valid time of the newest IEM frame; MRMS mask frames are matched to it.
+  // Until IEM's metadata answers, estimate (n0q runs every 5 min, ~3 min late).
+  let anchor = Math.floor((Date.now() - 3 * 60e3) / 300e3) * 300e3;
+  const maskTime = (i) => new Date(anchor - FRAME_LAG_MIN[i] * 60e3).toISOString();
+  async function syncAnchor() {
+    try {
+      const res = await fetchWithTimeout(N0Q_META, { cache: 'no-store', timeoutMs: 8000 });
+      const t = Date.parse((await res.json()).meta.valid);
+      if (!Number.isFinite(t) || t === anchor) return false;
+      anchor = t;
+      return true;
+    } catch {
+      return false; // keep the estimate — a few minutes off only softens mask edges
+    }
+  }
+  const anchorReady = syncAnchor();
+
+  // One MRMS grid per frame, shared by all of its tiles. Fetched strictly one
+  // at a time (newest frame first — it's on screen longest) because Akamai
+  // rejects even 3–4 parallel GetMaps. A failure resolves to null (unmasked)
+  // and stays that way until the next refresh.
+  const ptypeBeat = track('radar-ptype', { pollMs: REFRESH_MS });
+  let masks = OFFSETS.map(() => null);
+  let maskQueue = anchorReady;
+  function queueMasks() {
+    for (let i = OFFSETS.length - 1; i >= 0; i--) {
+      if (masks[i]) continue;
+      const gen = masks;
+      ptypeBeat.attempt();
+      const p = maskQueue.then(() => loadPtypeGrid(maskBounds, maskTime(i))).then(
+        (grid) => {
+          ptypeBeat.ok();
+          const f = frames[i];
+          if (gen === masks && f._maskMissed) {
+            f._maskMissed = false;
+            f.redraw(); // some tiles painted unmasked while this was in flight
+          }
+          return grid;
+        },
+        (err) => {
+          console.warn('[radar] precip-type mask failed, rendering unmasked:', err?.message || err);
+          return null;
+        },
+      );
+      masks[i] = p;
+      maskQueue = p;
+    }
+  }
+  function getMask(i) {
+    if (!maskBounds) return Promise.resolve(null);
+    if (!masks[i]) queueMasks();
+    return masks[i];
+  }
+
   // All frames stay on the map at opacity 0 so their tiles are loaded and
   // warm — animating is just an opacity swap, no network hitch per frame.
   const frames = OFFSETS.map((_, i) =>
@@ -242,6 +377,7 @@ export function createRadarLoop(map, { lowPower = false } = {}) {
       opacity: 0,
       maxZoom: MAX_ZOOM,
       outputScale,
+      getMask: () => getMask(i),
       // Keep the already-painted grid and let Leaflet transform it for the
       // duration of a camera flight. Each frame is a costly 9-image + blur
       // pipeline; rebuilding seven grids at every crossed integer zoom was
@@ -316,11 +452,16 @@ export function createRadarLoop(map, { lowPower = false } = {}) {
   // If this loop dies the map keeps animating the same aging frames — the
   // "screensaver of stale data" failure. Critical: the watchdog reloads on it.
   const refreshBeat = track('radar-refresh', { pollMs: REFRESH_MS, critical: true });
-  setInterval(() => {
+  setInterval(async () => {
     refreshBeat.ok();
+    await syncAnchor();
     ts = Date.now();
     imgCache.clear(); // URLs just changed — everything cached is stale
-    frames.forEach((f, i) => f.setUrl(url(i, ts)));
+    masks = OFFSETS.map(() => null);
+    frames.forEach((f, i) => {
+      f._maskMissed = false;
+      f.setUrl(url(i, ts));
+    });
   }, REFRESH_MS);
 
   // Warm the tiles for a fly destination while the camera is still in the

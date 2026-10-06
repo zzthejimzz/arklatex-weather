@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- Dev-only radar rendering testbed: /test-radar.html?v=lat,lon,zoom
      Lets us point the radar pipeline at live weather anywhere on the CONUS
-     to judge palette/smoothing quality when the ArkLaTex is quiet. -->
+     to judge palette/smoothing quality when the ArkLaTex is quiet.
+     ?ptype=snow paints every echo with the snow palette. -->
 <html>
 <head>
   <meta charset="utf-8" />
@@ -19,16 +20,18 @@
     import L from 'leaflet';
     import 'leaflet/dist/leaflet.css';
     import { createRadarLoop } from '/src/map/radar-loop.js';
+    import { setForceSnow } from '/src/map/radar-render.js';
 
     const [lat, lon, z] = (new URLSearchParams(location.search).get('v') || '39,-97,5')
       .split(',').map(Number);
+    if (new URLSearchParams(location.search).get('ptype') === 'snow') setForceSnow(true); // winter palette preview
     const map = L.map('map', { zoomControl: false, zoomSnap: 0 }).setView([lat, lon], z);
     map.createPane('radar');
     map.getPane('radar').style.zIndex = 450;
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png', {
       subdomains: 'abcd',
     }).addTo(map);
-    createRadarLoop(map);
+    createRadarLoop(map, { maskBounds: map.getBounds().pad(0.3) });
   </script>
 </body>
 </html>
