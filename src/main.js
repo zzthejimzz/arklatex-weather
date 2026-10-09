@@ -23,6 +23,8 @@ import { createTropicalLayer, GULF_BBOX } from './map/tropical-layer.js';
 import { createTropicalSource } from './data/tropical.js';
 import { createTropicalStormLayer } from './map/tropical-storm-layer.js';
 import { createTropicalStormSource } from './data/tropical-storm.js';
+import { createBuoycamSource } from './data/buoycam.js';
+import { createBuoycamCard } from './ui/buoycam-card.js';
 import { createRiverGaugeLayer } from './map/river-gauge-layer.js';
 import { createRiverGaugeSource } from './data/river-gauges.js';
 import { createCpcLayer } from './map/cpc-layer.js';
@@ -158,6 +160,12 @@ async function boot() {
   if (!visualTest) tropicalStormSource.start();
   const tropicalStormLayer = createTropicalStormLayer(map);
 
+  // NOAA buoy cameras near an active storm — the "what it looks like out
+  // there" follow-up to the track and satellite shots. Daylight only.
+  const buoycamSource = createBuoycamSource(() => director.refreshIdlePlan());
+  if (!visualTest) buoycamSource.start();
+  const buoycamCard = createBuoycamCard(map);
+
   // NWS river gauge flood status — only airs when a gauge locally is at
   // action stage or above, or unusually low.
   const riverSource = createRiverGaugeSource(geo);
@@ -265,6 +273,7 @@ async function boot() {
     eroLayer, eroFeed: eroSource,
     firewxLayer, firewxFeed: firewxSource, tropicalLayer, tropicalFeed: tropicalSource,
     tropicalStormLayer, tropicalStormFeed: tropicalStormSource,
+    buoycamCard, buoycamFeed: buoycamSource,
     riverLayer, riverFeed: riverSource,
     cpcLayer, cpcFeed: cpcSource,
     almanacFeed: almanacSource, frostFeed: frostSource,
@@ -535,6 +544,28 @@ async function boot() {
       const b = L.latLngBounds(boundsToLeaflet(GULF_BBOX)).extend(regionBounds);
       if (info?.bbox) b.extend(L.latLngBounds(boundsToLeaflet(info.bbox)));
       map.fitBounds(b.pad(0.05));
+    }, 500);
+  } else if (params.has('buoycam')) {
+    // Dev-only: park on the buoy-camera shot for the first active storm's
+    // nearest daylit buoy (?buoycam=N picks the Nth nearest). Live data only —
+    // blank without an NHC storm, or after dark.
+    map.fitBounds(regionBounds);
+    const n = Number(params.get('buoycam')) || 0;
+    const t = setInterval(() => {
+      const storm = tropicalStormSource.get()[0];
+      const buoy = buoycamSource.near(storm)[n];
+      if (!buoy) return;
+      clearInterval(t);
+      outlookLayer.hide();
+      radar.setHidden(true);
+      satelliteLayer.show('geocolor');
+      const name = storm.points[0].properties.stormname?.split(' ').at(-1);
+      buoycamCard.show(buoy, { stormName: name, photoPromise: buoycamSource.photo(buoy), obsPromise: buoycamSource.observations(buoy.id) });
+      const [lon, lat] = storm.points[0].geometry.coordinates;
+      const b = L.latLngBounds([[buoy.lat, buoy.lon], [lat, lon]]);
+      const c = b.getCenter();
+      b.extend([c.lat + 2.5, c.lng + 2.5]).extend([c.lat - 2.5, c.lng - 2.5]);
+      map.fitBounds(b.pad(0.1), { paddingBottomRight: [800, 0] });
     }, 500);
   } else if (visualTest && replayName) {
     director.boot();

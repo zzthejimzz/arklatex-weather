@@ -19,7 +19,7 @@ const DIST = join(fileURLToPath(import.meta.url), '../../dist');
 // NOWPLAYING_FILE in deploy/stream.sh.
 const NOWPLAYING_FILE = process.env.NOWPLAYING_FILE || '/var/lib/arklatex/music/.nowplaying';
 
-const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com']);
+const ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com', 'www.ndbc.noaa.gov']);
 
 // Pollen.com's keyless API 403s without a pollen.com Referer + browser
 // User-Agent pair — attach them for that host only.

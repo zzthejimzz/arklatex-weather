@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 // `vite preview` doesn't implement — its SPA fallback answers with index.html
 // and every SPC fetch dies on res.json(). Mirror deploy/serve.js's proxy so
 // preview behaves like the real host. Whitelist-only, same as serve.js.
-const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com']);
+const PROXY_ALLOWED_HOSTS = new Set(['www.spc.noaa.gov', 'www.wpc.ncep.noaa.gov', 'api.water.noaa.gov', 'www.pollen.com', 'www.ndbc.noaa.gov']);
 
 // Pollen.com's keyless API 403s without a pollen.com Referer + browser
 // User-Agent pair (both static — verified the root referer is enough).
@@ -64,6 +64,11 @@ export default defineConfig({
         target: 'https://api.water.noaa.gov',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/nwps/, '/nwps/v1/gauges'),
+      },
+      '/api/ndbc': {
+        target: 'https://www.ndbc.noaa.gov',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ndbc/, ''),
       },
       '/api/pollen': {
         target: 'https://www.pollen.com',

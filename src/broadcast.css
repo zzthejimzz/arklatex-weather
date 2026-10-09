@@ -1255,3 +1255,77 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
   text-shadow: 0 0 5px rgba(0, 0, 0, 0.9), 0 2px 3px rgba(0, 0, 0, 0.75);
 }
 .storm-pt.now .lbl { left: 20px; font-size: 16px; }
+
+/* ─── Buoy camera card (NDBC BuoyCAM, active-storm shot) ─────────────── */
+/* Right-hand card over the GeoColor satellite view; the buoy pin stays
+   visible on the left. Six 16:9 panels cut from the one panorama strip. */
+#buoycam-root {
+  position: absolute;
+  top: calc(var(--banner-h) + 20px);
+  right: 24px;
+  z-index: 900;
+  pointer-events: none;
+  display: none;
+}
+.bc-card {
+  width: 728px;
+  background: rgba(15, 22, 35, 0.94);
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--accent-cyan);
+  border-radius: 14px;
+  padding: 18px 22px 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: cardIn 0.35s ease;
+}
+.bc-eyebrow {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 15px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-cyan);
+}
+.bc-eyebrow svg { width: var(--icon-size-sm); height: var(--icon-size-sm); }
+.bc-title { margin-top: 4px; font-size: 30px; font-weight: 800; line-height: 1.2; }
+.bc-sub { margin-top: 2px; font-size: 17px; font-weight: 500; color: var(--text-muted); }
+.bc-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  margin: 12px 0;
+}
+.bc-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  padding: 8px 6px;
+}
+.bc-label {
+  font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--text-muted);
+}
+.bc-val { font-family: var(--font-mono); font-size: 26px; font-weight: 700; white-space: nowrap; }
+.bc-unit { margin-left: 2px; font-size: 14px; font-weight: 600; color: var(--text-muted); }
+.bc-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.bc-panel {
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background-color: #05080e;
+  background-repeat: no-repeat;
+  background-size: 600% auto;
+  box-shadow: inset 0 0 0 1px var(--border-light);
+}
+.bc-credit { margin-top: 10px; font-size: 14px; font-weight: 600; color: var(--text-muted); }
+
+.buoy-marker { background: none; border: none; }
+.buoy-pin {
+  position: relative; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent-cyan); border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.buoy-pin::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  border: 3px solid var(--accent-cyan);
+  animation: lsrPulse 2s ease-out infinite;
+}
+.buoy-name {
+  position: absolute; left: 30px; top: 50%; transform: translateY(-50%);
+  white-space: nowrap; font-size: 18px; font-weight: 800; color: #fff;
+  text-shadow: 0 0 4px #000, 0 0 7px #000, 1px 1px 2px #000;
+}

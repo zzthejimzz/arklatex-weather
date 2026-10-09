@@ -123,25 +123,25 @@ function dwellFor(alert, base) {
   return base;
 }
 
-export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed, warningsYtdFeed, warningsYtdLayer }) {
+export function createDirector({ map, alertsLayer, outlookLayer, popup, forecastPanel, regionBounds, precipScout, radar, reportsLayer, precipFocusLayer, reportsFeed, mcdLayer, mcdFeed, tempsLayer, windLayer, obsFeed, velocityLayer, satelliteLayer, rainfallLayer, droughtLayer, droughtFeed, eroLayer, eroFeed, firewxLayer, firewxFeed, tropicalLayer, tropicalFeed, tropicalStormLayer, tropicalStormFeed, buoycamCard, buoycamFeed, riverLayer, riverFeed, cpcLayer, cpcFeed, almanacFeed, frostFeed, uvFeed, aqiFeed, pollenLayer, pollenFeed, auroraFeed, eclipseFeed, warningsYtdFeed, warningsYtdLayer }) {
   const chipEl = document.getElementById('outlook-chip');
   const wideBounds = regionBounds.pad(1.6); // ERO/fire weather outlook shots need the multi-state pattern
   const outlookBounds = regionBounds.pad(0.7); // convective outlook: closer than wideBounds, still shows the neighboring-state risk pattern
 
   // Every camera move goes through here so the radar loop can warm the
   // destination's tiles while the shot is still in the air.
-  function fly(bounds, maxZoom, flyMs = FLY_MS) {
+  function fly(bounds, maxZoom, flyMs = FLY_MS, padding = {}) {
     radar?.prewarm(bounds, maxZoom);
     if (flyMs <= 0) {
       // Hard cut: no zoom animation → no CSS-scaled (blurry) frames. Suppress
       // the motion label/road drop across the synchronous move so names and
       // roads are present on arrival instead of blinking out and fading back.
       map._suppressMotionDrop = true;
-      map.fitBounds(bounds, { animate: false, ...(maxZoom ? { maxZoom } : {}) });
+      map.fitBounds(bounds, { animate: false, ...padding, ...(maxZoom ? { maxZoom } : {}) });
       map._suppressMotionDrop = false;
       return;
     }
-    map.flyToBounds(bounds, { duration: flyMs / 1000, ...(maxZoom ? { maxZoom } : {}) });
+    map.flyToBounds(bounds, { duration: flyMs / 1000, ...padding, ...(maxZoom ? { maxZoom } : {}) });
   }
 
   let active = [];
@@ -154,6 +154,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
   let spotIdx = 0; // 7-day city spotlight rotation — next city each idle cycle
   let rainIdx = 0; // rainfall-totals window rotation (24h → 48h → 3-day)
   let satIdx = 0;  // satellite channel rotation (vis when daylit → IR → WV)
+  let buoyIdx = 0; // buoy camera rotation — next nearby buoy each visit
   let almIdx = 0;  // almanac city rotation — next city each idle cycle
   let frostIdx = 0; // frost/growing-season city rotation — next city each idle cycle
   let uvIdx = 0;    // UV index city rotation — next city each idle cycle
@@ -365,6 +366,11 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
       // GeoColor beauty shot. Basin-wide source, so it frames whether the storm
       // is in the Gulf or still far out in the Atlantic.
       plan.push({ type: 'storm-sat', idx: i, dwell: busy ? 13_000 : 18_000 });
+      // Then the view from the water: a daylit NOAA buoy camera near the
+      // center, when there is one (nights and open-ocean gaps just skip it).
+      if (buoycamFeed?.near(tropicalStormFeed.get()[i]).length) {
+        plan.push({ type: 'buoycam', idx: i, dwell: busy ? 16_000 : 22_000 });
+      }
     }
     // Tropical outlook whenever the Atlantic has a 7-day development area —
     // existence is the gate (no local-overlap test: remnants travel). With
@@ -468,6 +474,9 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         ? [{ type: 'tropical-storm', idx: gulfStormIdx, dwell: GULF_WATCH_DWELL_MS },
            { type: 'storm-sat', idx: gulfStormIdx, dwell: GULF_WATCH_DWELL_MS }]
         : [{ type: 'tropical', dwell: GULF_WATCH_DWELL_MS }];
+      if (gulfStorm && buoycamFeed?.near(gulfStorm).length) {
+        unit.push({ type: 'buoycam', idx: gulfStormIdx, dwell: GULF_WATCH_DWELL_MS + 4_000 });
+      }
       const severe = outlookThreat || gulfStorm?.points[0]?.properties?.stormtype === 'HU';
       const interval = severe ? GULF_WATCH_INTERVAL : GULF_WATCH_INTERVAL_LOW;
       weaveThrough(plan, unit, interval);
@@ -503,7 +512,8 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     while (i < plan.length) {
       while (i < plan.length &&
         ((plan[i - 1]?.type === 'outlook' && plan[i]?.type === 'outlook') ||
-         (plan[i - 1]?.type === 'tropical-storm' && plan[i]?.type === 'storm-sat'))) {
+         (plan[i - 1]?.type === 'tropical-storm' && plan[i]?.type === 'storm-sat') ||
+         (plan[i - 1]?.type === 'storm-sat' && plan[i]?.type === 'buoycam'))) {
         i++;
       }
       if (i >= plan.length) break;
@@ -532,6 +542,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     cpcLayer?.hide();
     tropicalLayer?.hide();
     tropicalStormLayer?.hide();
+    buoycamCard?.hide();
     // Precip-shot extras: the ringed town marker and the GL-label suppression
     // it turns on. Cleared here so any shot that preempts the precip stop
     // (a live warning, a report) lands with the normal named basemap.
@@ -1050,6 +1061,33 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         const c = b.getCenter();
         b.extend([c.lat + 3, c.lng + 3]).extend([c.lat - 3, c.lng - 3]);
         fly(b.pad(0.08));
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'buoycam': {
+        // One nearby buoy's six-camera panorama + its wind/waves, over the
+        // GeoColor view framed on buoy and storm center together (left of the
+        // card). Rotates through the nearby buoys visit by visit.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        forecastPanel?.hide();
+        hideChip();
+        const storm = (tropicalStormFeed?.get() ?? [])[step.idx];
+        const buoys = buoycamFeed?.near(storm) ?? [];
+        if (!buoys.length) return advance(); // dark for the night / storm moved on since the plan was built
+        const buoy = buoys[buoyIdx++ % buoys.length];
+        if (!satelliteLayer?.show('geocolor')) return advance();
+        outlookLayer.hide();
+        outlookHidden = true;
+        cleanMap(); // radar/warning outlines over open Gulf clutter the buoy pin
+        const name = storm.points[0].properties.stormname?.replace(/^(Hurricane|Tropical Storm|Tropical Depression|Potential Tropical Cyclone|Post-Tropical Cyclone) /, '') || null;
+        if (!buoycamCard?.show(buoy, { stormName: name, photoPromise: buoycamFeed.photo(buoy), obsPromise: buoycamFeed.observations(buoy.id) })) return advance();
+        const [lon, lat] = storm.points[0].geometry.coordinates;
+        const b = L.latLngBounds([[buoy.lat, buoy.lon], [lat, lon]]);
+        const c = b.getCenter();
+        b.extend([c.lat + 2.5, c.lng + 2.5]).extend([c.lat - 2.5, c.lng - 2.5]);
+        fly(b.pad(0.1), undefined, FLY_MS, { paddingBottomRight: [800, 0] });
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }
