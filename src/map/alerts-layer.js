@@ -35,13 +35,43 @@ export function createAlertsLayer(map) {
     return 2.5 * zoomThin(map);
   }
 
-  function visualStyle(alert, highlighted) {
+  // Zone-based alerts built from the same UGC list come out as *identical*
+  // polygons (SHV routinely pairs a Red Flag Warning with a Wind Advisory over
+  // the exact same zones) — the top one's outline buries the other entirely.
+  // Those get a candy-stripe instead: each member draws only every n-th dash,
+  // offset so the colors alternate along the shared boundary. The twin the
+  // director is touring drops its stripe and draws solid on top, so the shot
+  // reads as that one alert.
+  function stripeLen() {
+    return 22 * zoomThin(map) + zoomBoost() * 2;
+  }
+  function stripeDash(stripe, highlighted, scale = 1) {
+    if (!stripe || highlighted) return null;
+    const s = stripeLen() / scale;
+    return { dashArray: `${s} ${s * (stripe.n - 1)}`, dashOffset: `${s * stripe.i}` };
+  }
+  // Cheap identity for "same shape": bounds + vertex count. Identical zone
+  // unions match exactly; distinct storm polygons essentially never do.
+  function geomFingerprint(geometry) {
+    const polys = geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates;
+    let verts = 0, w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    for (const poly of polys) for (const ring of poly) for (const [x, y] of ring) {
+      verts++;
+      if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y;
+    }
+    return `${geometry.type}|${verts}|${w.toFixed(4)},${s.toFixed(4)},${e.toFixed(4)},${n.toFixed(4)}`;
+  }
+
+  function visualStyle(alert, highlighted, stripe) {
     const watch = !!alert.style.watch;
+    const dash = stripeDash(stripe, highlighted);
     return {
       color: alert.style.color,
       weight: watch ? watchWeight() : baseWeight(highlighted),
       opacity: 1,
-      dashArray: watch ? '10 8' : null,
+      dashArray: dash ? dash.dashArray : watch ? '10 8' : null,
+      dashOffset: dash ? dash.dashOffset : null,
+      lineCap: dash ? 'butt' : 'round',
       fillColor: alert.style.color,
       fillOpacity: watch ? 0.06 : highlighted ? 0.18 : 0.10,
     };
@@ -57,9 +87,9 @@ export function createAlertsLayer(map) {
   }
 
   function restyle() {
-    for (const { layer, casing, alert } of rendered.values()) {
+    for (const { layer, casing, alert, stripe } of rendered.values()) {
       const highlighted = alert.key === highlightKey;
-      layer.setStyle(visualStyle(alert, highlighted));
+      layer.setStyle(visualStyle(alert, highlighted, stripe));
       casing?.setStyle(casingStyle(alert, highlighted));
     }
   }
@@ -75,11 +105,17 @@ export function createAlertsLayer(map) {
   }
   function counterScale() {
     const scale = map.getZoomScale(map.getZoom(), paneZoom);
-    for (const { layer, casing, alert } of rendered.values()) {
+    for (const { layer, casing, alert, stripe } of rendered.values()) {
       const highlighted = alert.key === highlightKey;
       const line = alert.style.watch ? watchWeight() : baseWeight(highlighted);
       setStrokeWidth(layer, line / scale);
       if (casing) setStrokeWidth(casing, (baseWeight(highlighted) + 3.5) / scale);
+      const dash = stripeDash(stripe, highlighted, scale);
+      if (dash) layer.eachLayer(l => {
+        const el = l.getElement();
+        el?.setAttribute('stroke-dasharray', dash.dashArray);
+        el?.setAttribute('stroke-dashoffset', dash.dashOffset);
+      });
     }
   }
   map.on('zoom', counterScale);
@@ -89,12 +125,27 @@ export function createAlertsLayer(map) {
     group.clearLayers();
     rendered.clear();
     // Ascending score so the most severe draw last (on top within their pane).
-    for (const alert of [...alerts].sort((a, b) => a.score - b.score)) {
-      if (!alert.geometry) continue;
+    const drawn = [...alerts].filter(a => a.geometry).sort((a, b) => a.score - b.score);
+    const twins = new Map(); // fingerprint → alerts sharing that exact shape
+    for (const alert of drawn) {
+      const fp = `${alert.style.watch ? 'W' : 'X'}|${geomFingerprint(alert.geometry)}`;
+      if (!twins.has(fp)) twins.set(fp, []);
+      twins.get(fp).push(alert);
+    }
+    const stripes = new Map(); // alert.key → { i, n }
+    for (const group of twins.values()) {
+      // Same color twice (two Wind Advisory segments, say) gains nothing.
+      if (new Set(group.map(a => a.style.color)).size < 2) continue;
+      group.forEach((a, i) => stripes.set(a.key, { i, n: group.length }));
+    }
+    for (const alert of drawn) {
       const feature = { type: 'Feature', geometry: alert.geometry };
       const highlighted = alert.key === highlightKey;
+      const stripe = stripes.get(alert.key) ?? null;
       let casing = null;
-      if (!alert.style.watch) {
+      // One casing per striped group — a later twin's casing would black out
+      // the earlier twin's dashes underneath it.
+      if (!alert.style.watch && !(stripe?.i > 0)) {
         casing = L.geoJSON(feature, {
           pane: 'warnings',
           interactive: false,
@@ -105,11 +156,13 @@ export function createAlertsLayer(map) {
       const layer = L.geoJSON(feature, {
         pane: alert.style.watch ? 'watches' : 'warnings',
         interactive: false,
-        style: () => visualStyle(alert, highlighted),
+        style: () => visualStyle(alert, highlighted, stripe),
       });
       group.addLayer(layer);
-      rendered.set(alert.key, { layer, casing, alert });
+      rendered.set(alert.key, { layer, casing, alert, stripe });
     }
+    const toured = rendered.get(highlightKey);
+    if (toured?.stripe) toured.layer.bringToFront(); // rebuilt mid-tour: keep it on top
     requestAnimationFrame(() => {
       syncFlash(); // paths need to hit the DOM first
       counterScale(); // rebuilt mid-fly, the pane may be transform-scaled
@@ -119,6 +172,8 @@ export function createAlertsLayer(map) {
   function highlight(key) {
     highlightKey = key;
     restyle();
+    const toured = rendered.get(key);
+    if (toured?.stripe) toured.layer.bringToFront(); // solid twin over the striped one(s)
     syncFlash();
   }
 
