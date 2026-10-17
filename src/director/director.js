@@ -964,7 +964,7 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         alertsLayer.highlight(null);
         forecastPanel?.hide();
         const worst = firewxFeed?.worst(step.day);
-        const info = worst && firewxLayer?.show(firewxFeed.get(step.day));
+        const info = worst && firewxLayer?.show(firewxFeed.get(step.day), wideBounds);
         if (!info) return advance(); // area gone since the plan was built
         outlookLayer.hide(); // convective risk fills run the same orange/red ramp
         outlookHidden = true;

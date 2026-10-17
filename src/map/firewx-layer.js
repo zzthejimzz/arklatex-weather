@@ -17,8 +17,10 @@ export function createFireWxLayer(map) {
   let layer = null;
 
   // Draws every feature in the product (the wide shot benefits from the full
-  // multi-state picture); the director gates the shot on local overlap.
-  function show(features) {
+  // multi-state picture); the director gates the shot on local overlap. The
+  // legend lists only categories inside `frame` (the shot's bounds) — a
+  // Critical area in California shouldn't imply one off the edge of ours.
+  function show(features, frame) {
     hide();
     if (!features.length) return null;
     const sorted = [...features].sort(
@@ -38,7 +40,14 @@ export function createFireWxLayer(map) {
       },
     }).addTo(map);
 
-    const present = [...new Set(sorted.map(f => f.properties.LABEL))]
+    // Per polygon part, not per feature: one MultiPolygon category can span
+    // both coasts, and its overall box would overlap any frame.
+    const partInFrame = f => {
+      const g = f.geometry;
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+      return polys.some(p => L.latLngBounds(p[0].map(([x, y]) => [y, x])).intersects(frame));
+    };
+    const present = [...new Set(sorted.filter(f => !frame || partInFrame(f)).map(f => f.properties.LABEL))]
       .sort((a, b) => FIRE_META[a].order - FIRE_META[b].order);
     return { legend: present.map(l => FIRE_META[l]) };
   }
