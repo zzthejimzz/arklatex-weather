@@ -7,9 +7,19 @@ set -euo pipefail
 REPO=https://github.com/zzthejimzz/arklatex-weather.git
 DIR=/opt/arklatex
 
+# Node 24 LTS from NodeSource — Debian 12's packaged nodejs is 18, which the
+# map stack's dependencies no longer support. The armored key works with
+# signed-by directly, so no gpg is needed.
+apt-get update
+apt-get install -y --no-install-recommends ca-certificates curl
+mkdir -p /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o /etc/apt/keyrings/nodesource.asc
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.asc] https://deb.nodesource.com/node_24.x nodistro main" \
+  > /etc/apt/sources.list.d/nodesource.list
+
 apt-get update
 apt-get install -y --no-install-recommends \
-  chromium xvfb ffmpeg nodejs npm git \
+  chromium xvfb ffmpeg nodejs git \
   mpv pulseaudio pulseaudio-utils \
   fonts-noto-core fonts-noto-color-emoji fonts-inter
 
