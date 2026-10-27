@@ -35,11 +35,21 @@ export function createPopup(root) {
     if (threat) rows.push(row(icon('warning'), 'Threat', titleCase(threat), true));
 
     const hail = param(p, 'maxHailSize');
-    if (hail && parseFloat(hail) > 0) {
+    const hasHail = hail && parseFloat(hail) > 0;
+    if (hasHail) {
       rows.push(row(icon('hail'), 'Max hail', `${parseFloat(hail).toFixed(2)}"`));
     }
     const gust = param(p, 'maxWindGust');
     if (gust) rows.push(row(icon('wind'), 'Max wind', /mph/i.test(gust) ? gust.toLowerCase() : `${gust} mph`));
+
+    // Products without impact tags (civil notices like Local Area Emergency,
+    // advisories, SPS) say nothing on the card beyond their event name — show
+    // the gist of the description instead. Storm warnings already carry the
+    // numbers above, and their prose is too long to read on video.
+    const stormTagged = detection || threat || hasHail || gust || param(p, 'flashFloodDetection');
+    const { summary, requester } = stormTagged
+      ? {} : summarizeDescription(p.description);
+    if (requester) rows.push(row(icon('office'), 'On behalf of', escapeHtml(requester)));
 
     if (alert.motion) {
       rows.push(row(icon('storm-motion'), 'Moving', `${compass8(alert.motion.toDeg)} at ${alert.motion.speedMph} mph`));
@@ -73,6 +83,7 @@ export function createPopup(root) {
         <div class="warn-card-area">${areaText}<br><span class="states">${states}</span></div>
         <div class="warn-card-rows">${rows.join('')}</div>
         ${pathHtml}
+        ${summary ? `<div class="warn-card-remark">${escapeHtml(summary)}</div>` : ''}
       </div>`;
   }
 
@@ -153,6 +164,35 @@ function agoText(iso) {
   if (min < 60) return `${min} min ago`;
   const h = Math.floor(min / 60);
   return `${h}h ${min % 60}m ago`;
+}
+
+// Pull a short, readable gist out of a CAP description. Handles the two
+// shapes we see: civil relays ("LAESHV / The following message is
+// transmitted at the request of X. / <message>") and bulleted NWS products
+// ("* WHAT...Northwest winds 20 to 30 mph..."). The card's remark style
+// line-clamps, so this only needs to pick the right text, not trim it hard.
+export function summarizeDescription(desc) {
+  const paras = String(desc ?? '')
+    .split(/\n\s*\n/)
+    .map(s => s.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter(s => !/^[A-Z]{3}[A-Z0-9]{3}$/.test(s)); // bare AWIPS id, e.g. LAESHV
+  if (!paras.length) return {};
+
+  const what = paras.join('\n').match(/\*\s*WHAT\.\.\.([^*]+)/);
+  if (what) return { summary: what[1].replace(/\s+/g, ' ').trim() };
+  // Warning-template prose ("The National Weather Service in X has issued
+  // a * ... Warning for...") is pathcast text, not a summary — skip it.
+  if (/^The National Weather Service .* has issued/i.test(paras[0])) return {};
+
+  let requester = null;
+  const relay = paras[0].match(/transmitted at the request of (?:the )?(.+?)\.?$/i);
+  if (relay) {
+    requester = relay[1];
+    paras.shift();
+  }
+  const summary = paras.join(' ');
+  return { summary: summary.length > 320 ? `${summary.slice(0, 317).trimEnd()}…` : summary, requester };
 }
 
 function escapeHtml(s) {
