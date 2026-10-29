@@ -152,6 +152,7 @@ function buildBaseStyle(style) {
     }
     layers.push(layer);
   }
+  layers.push(FLIGHT_STATE_LINE);
   return {
     version: 8,
     sources: { openmaptiles: style.sources.openmaptiles },
@@ -160,6 +161,24 @@ function buildBaseStyle(style) {
     layers,
   };
 }
+
+// GL stand-in for the white state borders during a camera glide. The real
+// ones are Leaflet SVG (basemap.js addStateBorders), which flight-veil.js
+// takes off air mid-flight; GL re-renders every frame, so this copy holds the
+// geography in place until the SVG lines fade back in. Matches their look
+// (1.5px white @ 0.75). Opacity 0 at rest — GL skips drawing a zero-opacity
+// line, so it's free between flights — and toggled by paint only, never
+// visibility, which would make GL re-parse every tile of the source.
+const FLIGHT_STATE_OPACITY = 0.75;
+const FLIGHT_STATE_LINE = {
+  id: 'boundary_state_flight',
+  type: 'line',
+  source: 'openmaptiles',
+  'source-layer': 'boundary',
+  filter: ['all', ['==', ['get', 'admin_level'], 4], ['!=', ['get', 'maritime'], 1]],
+  layout: { 'line-join': 'round', 'line-cap': 'round' },
+  paint: { 'line-color': '#ffffff', 'line-width': 1.5, 'line-opacity': 0 },
+};
 
 function buildLabelsStyle(style) {
   const layers = [];
@@ -251,35 +270,63 @@ export async function addVectorBasemap(map) {
   // precip-tracking shot wants a clean map with only its own ringed town label,
   // not a duplicate GL name underneath. Base geometry still restores as usual.
   let labelsSuppressed = false;
+  // The motion drop is in effect (set at takeoff, cleared on landing).
+  let dropped = false;
 
-  // Hide outright during the flight (visibility:none skips the layer entirely,
-  // so it costs nothing per frame). setLayoutProperty throws before the style
-  // loads (an early-boot fly), so guard — the layer just stays put that once.
+  // Every mutation below guards on layer existence, not isStyleLoaded(): on a
+  // live map glyphs/tiles keep streaming, so isStyleLoaded() reports false long
+  // after the layers are registered and mutable — gating on it skipped the drop
+  // on any flight that took off mid-load, and (worse) skipped the restore on
+  // any landing while the new view's tiles were still arriving, leaving roads
+  // and labels off for the whole shot.
+  //
+  // Labels hide outright (visibility:none skips symbol placement, which runs
+  // even at opacity 0). Base geometry fades out by paint opacity instead: GL
+  // skips drawing zero-opacity lines/fills just the same, and a visibility
+  // change would make GL re-parse every tile of the source — at takeoff and
+  // again on landing, right when the shot needs the CPU.
   // A hard cut (director's instant fitBounds for severe shots) fires the move
   // lifecycle synchronously with no animated frames to economize, so there is
-  // nothing to drop — skip the hide/show cycle entirely and leave roads and
-  // labels visible so they're present the instant the camera lands.
+  // nothing to drop — leave roads and labels up so they're present the
+  // instant the camera lands.
   const hideForMove = () => {
     if (map._suppressMotionDrop) return;
+    dropped = true;
     for (const s of motionLayers) {
-      if (s.gl.isStyleLoaded()) s.gl.setLayoutProperty(s.id, 'visibility', 'none');
+      if (!s.gl.getLayer(s.id)) continue;
+      if (s.isLabel) s.gl.setLayoutProperty(s.id, 'visibility', 'none');
+      else for (const p of s.props) s.gl.setPaintProperty(s.id, p, 0); // fades via -transition
+    }
+    // The SVG state lines vanish instantly (flight-veil.js) — the GL stand-in
+    // must appear just as fast, so drop its transition for the switch-on.
+    if (glBase.getLayer(FLIGHT_STATE_LINE.id)) {
+      glBase.setPaintProperty(FLIGHT_STATE_LINE.id, 'line-opacity-transition', { duration: 0, delay: 0 });
+      glBase.setPaintProperty(FLIGHT_STATE_LINE.id, 'line-opacity', FLIGHT_STATE_OPACITY);
     }
   };
 
-  // On settle, reveal at opacity 0 then ramp to 1 — the baked -transition turns
-  // that into a fade, so the one-time populate reads as a reveal, not a pop.
-  // Suppressed labels are left hidden.
+  // On settle, reveal labels at opacity 0 then ramp to 1 — the baked
+  // -transition turns that into a fade, so the one-time populate reads as a
+  // reveal, not a pop. Suppressed labels are left hidden. Runs on any landing
+  // after a drop, including a hard cut that interrupted the glide.
   const showOnSettle = () => {
-    if (map._suppressMotionDrop) return; // hard cut never hid anything
+    if (!dropped) return;
+    dropped = false;
     for (const s of motionLayers) {
-      if (!s.gl.isStyleLoaded() || (s.isLabel && labelsSuppressed)) continue;
+      if (!s.isLabel || labelsSuppressed || !s.gl.getLayer(s.id)) continue;
       for (const p of s.props) s.gl.setPaintProperty(s.id, p, 0); // instant: still hidden
       s.gl.setLayoutProperty(s.id, 'visibility', 'visible');
     }
     requestAnimationFrame(() => {
+      if (dropped) return; // already took off again
       for (const s of motionLayers) {
-        if (!s.gl.isStyleLoaded() || (s.isLabel && labelsSuppressed)) continue;
+        if (!s.gl.getLayer(s.id) || (s.isLabel && labelsSuppressed)) continue;
         for (const p of s.props) s.gl.setPaintProperty(s.id, p, 1); // ramps via -transition
+      }
+      // Crossfade back: the SVG state lines fade in as the GL stand-in fades out.
+      if (glBase.getLayer(FLIGHT_STATE_LINE.id)) {
+        glBase.setPaintProperty(FLIGHT_STATE_LINE.id, 'line-opacity-transition', { duration: FADE_MS, delay: 0 });
+        glBase.setPaintProperty(FLIGHT_STATE_LINE.id, 'line-opacity', 0);
       }
     });
   };
@@ -287,12 +334,10 @@ export async function addVectorBasemap(map) {
   // Director-driven per-shot label suppression. Applies immediately if the
   // camera is already settled; if a move is in flight, showOnSettle honors the
   // flag on landing either way.
-  // Guard on layer existence, not isStyleLoaded(): on a live map glyphs/tiles
-  // keep streaming, so isStyleLoaded() reports false long after the layers are
-  // registered and mutable — gating on it would skip the suppression entirely.
   const setLabelsHidden = (on) => {
     if (on === labelsSuppressed) return;
     labelsSuppressed = on;
+    if (!on && dropped) return; // mid-flight: showOnSettle brings them back
     for (const s of motionLayers) {
       if (!s.isLabel || !s.gl.getLayer(s.id)) continue;
       if (on) {

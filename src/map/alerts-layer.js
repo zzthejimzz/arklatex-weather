@@ -45,9 +45,9 @@ export function createAlertsLayer(map) {
   function stripeLen() {
     return 22 * zoomThin(map) + zoomBoost() * 2;
   }
-  function stripeDash(stripe, highlighted, scale = 1) {
+  function stripeDash(stripe, highlighted) {
     if (!stripe || highlighted) return null;
-    const s = stripeLen() / scale;
+    const s = stripeLen();
     return { dashArray: `${s} ${s * (stripe.n - 1)}`, dashOffset: `${s * stripe.i}` };
   }
   // Cheap identity for "same shape": bounds + vertex count. Identical zone
@@ -94,32 +94,10 @@ export function createAlertsLayer(map) {
     }
   }
 
-  // During an animated zoom Leaflet scales the whole SVG pane with a CSS
-  // transform and only re-projects paths at zoomend — so a 9px outline reads
-  // as 40+px mid-fly. Counter-scale the stroke widths every zoom frame so the
-  // apparent thickness stays steady while the camera moves; zoomend's restyle
-  // then lands on the exact final weights (scale is 1 again by then).
-  let paneZoom = map.getZoom(); // zoom the vector pane was last projected at
-  function setStrokeWidth(group, w) {
-    group.eachLayer(l => l.getElement()?.setAttribute('stroke-width', w));
-  }
-  function counterScale() {
-    const scale = map.getZoomScale(map.getZoom(), paneZoom);
-    for (const { layer, casing, alert, stripe } of rendered.values()) {
-      const highlighted = alert.key === highlightKey;
-      const line = alert.style.watch ? watchWeight() : baseWeight(highlighted);
-      setStrokeWidth(layer, line / scale);
-      if (casing) setStrokeWidth(casing, (baseWeight(highlighted) + 3.5) / scale);
-      const dash = stripeDash(stripe, highlighted, scale);
-      if (dash) layer.eachLayer(l => {
-        const el = l.getElement();
-        el?.setAttribute('stroke-dasharray', dash.dashArray);
-        el?.setAttribute('stroke-dashoffset', dash.dashOffset);
-      });
-    }
-  }
-  map.on('zoom', counterScale);
-  map.on('zoomend moveend', () => { paneZoom = map.getZoom(); });
+  // No per-frame stroke work during animated zooms: Leaflet only CSS-scales
+  // the SVG panes mid-flight, so both alert panes sit the glide out under the
+  // flight veil (map/flight-veil.js) and zoomend's restyle lands the final
+  // weights before they fade back in.
 
   function update(alerts) {
     group.clearLayers();
@@ -163,10 +141,7 @@ export function createAlertsLayer(map) {
     }
     const toured = rendered.get(highlightKey);
     if (toured?.stripe) toured.layer.bringToFront(); // rebuilt mid-tour: keep it on top
-    requestAnimationFrame(() => {
-      syncFlash(); // paths need to hit the DOM first
-      counterScale(); // rebuilt mid-fly, the pane may be transform-scaled
-    });
+    requestAnimationFrame(syncFlash); // paths need to hit the DOM first
   }
 
   function highlight(key) {

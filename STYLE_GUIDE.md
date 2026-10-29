@@ -247,6 +247,7 @@ Existing vocabulary (from `broadcast.css`, confirmed as canonical — extend, do
 | `watchFlash` | 1.8s | ease-in-out, infinite | Watch-polygon outline opacity breathing while camera lingers |
 | `warnFlash` | 0.8s | ease-in-out, infinite | Hard attention-strobe on a brand-new warning polygon (~10s window on arrival) |
 | `.tk-roll` (transition) | 0.35s | cubic-bezier(0.25, 0.9, 0.3, 1) | Lower-third ticker page roll-up (one item rolls up into place every ~8s; static between rolls — continuous scroll judders on the software-rendered VPS) |
+| `.in-flight` (flight veil) | out instant / in 0.35s | ease-out | SVG map overlays (fills, state lines, alert outlines) + curated city labels sit out animated camera glides and fade in on landing — Leaflet only CSS-scales their stale drawing mid-flight. GL basemap carries the glide (`map/flight-veil.js`) |
 
 Rules for new motion:
 - **Entrances** (a card/panel appearing): 0.3–0.65s, ease or a gentle cubic-bezier overshoot

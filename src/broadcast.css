@@ -696,6 +696,16 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .leaflet-control-attribution a { color: var(--text-muted) !important; }
 .leaflet-control-zoom { display: none; } /* broadcast output — no interactive chrome */
 
+/* Flight veil (map/flight-veil.js): every SVG overlay renderer (fills, state
+   lines, alert outlines) and the curated city labels sit out animated camera
+   moves — Leaflet only CSS-scales their stale drawing mid-flight, which reads
+   as a shrinking box of color / a pile of names. Out instantly at takeoff,
+   faded back in once redrawn for the landing view. Opacity only (compositor). */
+.leaflet-pane > svg,
+.leaflet-cities-pane { transition: opacity 0.35s ease-out; }
+.in-flight .leaflet-pane > svg,
+.in-flight .leaflet-cities-pane { opacity: 0; transition: none; }
+
 /* Curated city labels — overview zoom band only; kept small and quiet so the
    map doesn't read as cluttered when the whole region is in frame. */
 .city-label {

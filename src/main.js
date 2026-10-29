@@ -100,6 +100,7 @@ async function boot() {
   const [geo] = await Promise.all([loadGeo(), loadPopulationGrid()]);
 
   const map = createBroadcastMap(document.getElementById('map'), geo.bbox);
+  if (import.meta.env.DEV) window.__map = map; // verification hook (stripped from builds)
   addStateBorders(map);
   addCityLabels(map);
   // MRMS precip-type mask covers the director's widest shots (wideBounds pad).

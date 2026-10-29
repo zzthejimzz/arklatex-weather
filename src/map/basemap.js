@@ -25,6 +25,7 @@
 //   temps 660         current-temperature chips (temps map mode only)
 import L from 'leaflet';
 import { addVectorBasemap } from './vector-basemap.js';
+import { addFlightVeil } from './flight-veil.js';
 
 const ATTR =
   '&copy; OpenStreetMap &middot; OpenFreeMap &middot; Radar/Satellite: Iowa State Mesonet / NEXRAD / GOES';
@@ -65,6 +66,9 @@ export function createBroadcastMap(el, bbox) {
   }
 
   map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
+  // Registered before any overlay exists, so its moveend runs ahead of the
+  // SVG renderers' redraw — both land in the same task, before any paint.
+  addFlightVeil(map);
 
   addVectorBasemap(map).catch((err) => {
     console.warn('[basemap] vector style unavailable, falling back to CARTO raster:', err);

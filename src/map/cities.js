@@ -117,7 +117,9 @@ export function addCityLabels(map) {
     const z = map.getZoom();
     // Greedy collision cull: place labels in priority order, hide any whose
     // box overlaps an already-placed one. Overlap geometry only depends on
-    // zoom (relative pixel distances are pan-invariant), so zoomend suffices.
+    // zoom (relative pixel distances are pan-invariant), so zoomend suffices —
+    // mid-flight the labels would converge, but the whole pane sits animated
+    // moves out under the flight veil (flight-veil.js) and fades back in after.
     const placed = [];
     for (const e of byPriority) {
       const [lo, hi] = TIER_ZOOM[e.tier];

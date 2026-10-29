@@ -49,6 +49,12 @@ if the owning process is `node`; port 5173 may be Jim's own dev server).
 
 ## Inspection hooks
 
+- `window.__map` (dev server only) — the Leaflet map. Drive the camera
+  directly (`flyToBounds`, `setView`); a hard cut like the director's is
+  `_suppressMotionDrop = true` around a non-animated `fitBounds`. The GL
+  basemaps are `Object.values(__map._layers).filter(l => l.getMaplibreMap)`.
+  For camera-move visuals, record with CDP `Page.startScreencast` — the
+  headless glide runs ~4 s instead of 2.4 s, so sample by timestamp.
 - `window.__health()` — per-feed freshness (lastAttempt/lastOk) from the
   health registry. First check when something looks dead.
 - Chip state: `document.getElementById('mode-chip')` innerText + className
