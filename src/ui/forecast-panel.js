@@ -550,7 +550,7 @@ export function createForecastPanel({ root, map, forecasts }) {
     // Map legend: the county ramp composited on the basemap tone, with the
     // fewest/most warned counts at its ends.
     const [lo, hi] = ytdRange(data.counties);
-    const ramp = [0, 0.25, 0.5, 0.75, 1].map(t => {
+    const ramp = Array.from({ length: 9 }, (_, i) => i / 8).map(t => {
       const f = ytdStyle(lo + t * (hi - lo), lo, hi) ?? { color: 'rgb(0,0,0)', opacity: 0 };
       const [r, g, b] = f.color.match(/\d+/g).map(Number);
       const over = (c) => Math.round(c * f.opacity + 0x59 * (1 - f.opacity)); // land #595959

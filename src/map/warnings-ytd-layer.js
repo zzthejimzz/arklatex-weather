@@ -2,25 +2,33 @@
 // many severe/tornado/flash-flood warnings it has been under this year, with
 // chips on the three most-warned. Rides beside the YTD warnings panel card so
 // the map shows *where* while the panel shows *how many*.
-//
-// A single cyan family (the info accent — style guide §8) rather than a warm
-// ramp: yellow→red would read as a live risk/severity map, which this isn't.
 import L from 'leaflet';
 
-// Saturated teal → pale bright cyan, opacity rising with it: on the dark basemap
-// "brighter = more" reads instantly. Stretched across the actual min–max of
-// the warned counties — every county in an active CWA racks up 10+, so a
-// 0-based ramp left the whole region one flat shade.
-const LO = [8, 145, 178]; // cyan-600
-const HI = [207, 250, 254]; // cyan-100
-const LO_FILL = 0.42;
-const HI_FILL = 0.88;
+// Rainbow "heat" ramp, blue (fewest) → green → yellow → orange → red (most),
+// interpolated between stops so every county gets its own shade. Stretched
+// across the actual min–max of the warned counties — every county in an
+// active CWA racks up 10+, so a 0-based ramp left the whole region one flat
+// shade. Opacity stays high throughout: a hue ramp washed out over the gray
+// basemap turns the low end muddy instead of blue.
+const STOPS = [
+  [0.00, [37, 99, 235]],  // blue-600
+  [0.25, [34, 197, 94]],  // green-500
+  [0.50, [250, 204, 21]], // yellow-400
+  [0.75, [249, 115, 22]], // orange-500
+  [1.00, [239, 68, 68]],  // red-500
+];
+const LO_FILL = 0.62;
+const HI_FILL = 0.82;
 
 /** Fill for a county count given the warned-county range; null = unwarned. */
 export function ytdStyle(count, lo, hi) {
   if (!count) return null;
   const t = hi > lo ? Math.min(1, Math.max(0, (count - lo) / (hi - lo))) : 1;
-  const mix = (i) => Math.round(LO[i] + (HI[i] - LO[i]) * t);
+  const k = Math.max(1, STOPS.findIndex(([at]) => at >= t));
+  const [a, ca] = STOPS[k - 1];
+  const [b, cb] = STOPS[k];
+  const u = (t - a) / (b - a);
+  const mix = (i) => Math.round(ca[i] + (cb[i] - ca[i]) * u);
   return { color: `rgb(${mix(0)}, ${mix(1)}, ${mix(2)})`, opacity: LO_FILL + (HI_FILL - LO_FILL) * t };
 }
 
@@ -79,7 +87,7 @@ export function createWarningsYtdLayer(map, zones) {
       style: f => {
         const fill = ytdStyle(f.properties.count, lo, hi);
         return fill
-          ? { color: '#67e8f9', weight: 0.8, opacity: 0.45, fillColor: fill.color, fillOpacity: fill.opacity }
+          ? { color: '#0b1220', weight: 0.8, opacity: 0.5, fillColor: fill.color, fillOpacity: fill.opacity }
           : { stroke: false, fill: false }; // outside the CWA (or genuinely unwarned)
       },
     }));
@@ -95,7 +103,7 @@ export function createWarningsYtdLayer(map, zones) {
           className: 'temp-anchor',
           html: `
             <div class="temp-chip ytd-chip">
-              <b>${t.count}</b>
+              <b style="color:${ytdStyle(t.count, lo, hi)?.color}">${t.count}</b>
               <span>#${i + 1} ${t.name}</span>
             </div>`,
           iconSize: [0, 0],

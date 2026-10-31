@@ -1049,7 +1049,7 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .ytd-key span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .ytd-key i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
 .ytd-key .yk-map { margin-left: auto; }
-.ytd-key .yk-map i { width: 54px; height: 11px; border: 1px solid rgba(34, 211, 238, 0.4); }
+.ytd-key .yk-map i { width: 72px; height: 11px; border: 1px solid var(--border-light); }
 
 .ytd-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
 .ytd-fact {
@@ -1069,8 +1069,8 @@ path.warn-flash { animation: warnFlash 0.8s ease-in-out infinite; }
 .yf-sub { margin-top: 2px; font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); }
 
 /* Map chips on the three most-warned counties (temp-chip shell). */
-.ytd-chip { border-color: rgba(34, 211, 238, 0.55); }
-.ytd-chip b { font-family: var(--font-mono); color: var(--accent-cyan); }
+.ytd-chip { border-color: rgba(239, 68, 68, 0.5); }
+.ytd-chip b { font-family: var(--font-mono); } /* color: the county's ramp shade, inline */
 
 /* Pollen page (rides the forecast panel) + pollen map chips */
 /* IQVIA category bands: 2.4 / 4.8 / 7.2 / 9.6 of 12 = every 20%. */
