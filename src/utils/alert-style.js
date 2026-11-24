@@ -25,7 +25,18 @@ const STYLES = [
   [/winter storm warning/i,            { color: '#ff69b4', icon: icon('ice'),          abbr: 'WSW',       tone: 'blue' }],
   [/winter storm watch/i,              { color: '#c9a0dc', icon: icon('ice'),          abbr: 'WSW WATCH', tone: 'blue',  watch: true }],
   [/winter weather/i,                  { color: '#b57edc', icon: icon('ice'),          abbr: 'WINTER',    tone: 'blue' }],
-  [/freeze|frost|cold/i,               { color: '#5b8dd6', icon: icon('freeze'),       abbr: 'COLD',      tone: 'blue' }],
+  // Freeze products split by tier so a Freeze Watch and a Freeze Warning in
+  // effect together read as two different alerts (one catch-all "COLD" style
+  // made them identical chips). Blue family, deepening with severity: watch a
+  // light cyan (dashed, like every watch), warning a saturated blue, hard
+  // freeze a violet-blue (NWS uses violet for it). Hard tiers first — "Freeze
+  // Warning" also matches the tail of "Hard Freeze Warning".
+  [/hard freeze warning/i,             { color: '#7b5cff', icon: icon('freeze'),       abbr: 'HARD FRZ',  tone: 'blue' }],
+  [/hard freeze watch/i,               { color: '#5fd0e8', icon: icon('freeze'),       abbr: 'HFZ WATCH', tone: 'blue',  watch: true }],
+  [/freeze warning/i,                  { color: '#3d6bff', icon: icon('freeze'),       abbr: 'FRZ WARN',  tone: 'blue' }],
+  [/freeze watch/i,                    { color: '#5fd0e8', icon: icon('freeze'),       abbr: 'FRZ WATCH', tone: 'blue',  watch: true }],
+  [/frost/i,                           { color: '#6495ed', icon: icon('freeze'),       abbr: 'FROST',     tone: 'blue' }],
+  [/freeze|cold/i,                     { color: '#5b8dd6', icon: icon('freeze'),       abbr: 'COLD',      tone: 'blue' }],
   [/high wind|wind advisory/i,         { color: '#d8b25c', icon: icon('wind'),         abbr: 'WIND',      tone: 'amber' }],
   // Extreme/Excessive Heat *Warning* gets a deep violet, well clear of the
   // salmon Heat Advisory below — the two otherwise read as the same color on a

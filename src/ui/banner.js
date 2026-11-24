@@ -94,7 +94,7 @@ export function createBanner(el) {
     countsEl.innerHTML = chips.map(g => {
       const s = styleForEvent(g.event);
       return `
-        <div class="count-chip tone-${s.tone}">
+        <div class="count-chip tone-${s.tone}${s.watch ? ' watch' : ''}">
           <div class="icon-row"><span>${s.icon}</span><span class="count">${g.count}</span></div>
           <div class="abbr">${s.abbr}</div>
         </div>`;

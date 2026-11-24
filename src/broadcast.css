@@ -430,7 +430,11 @@ html, body {
 .count-chip.tone-amber .count  { color: var(--accent-amber); }
 .count-chip.tone-green  { border-color: rgba(34,197,94,0.6);  }
 .count-chip.tone-green .count  { color: var(--accent-green); }
+.count-chip.tone-blue  { border-color: rgba(96,165,250,0.6); }
 .count-chip.tone-blue .count   { color: var(--accent-blue); }
+/* Watches get a dashed edge, matching their dashed polygons on the map, so a
+   watch and a warning of the same hazard never read as the same chip. */
+.count-chip.watch { border-style: dashed; }
 .counts-none { font-size: 16px; color: var(--text-muted); }
 
 /* ─── Warning popup card ────────────────────────────────────────────── */

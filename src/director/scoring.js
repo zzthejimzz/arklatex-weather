@@ -48,6 +48,14 @@ export function scoreAlert(props) {
   // (severe potential, isolated hazards) that precedes a real warning.
   if (ev === 'special weather statement') return 10;
   if (ev === 'heat advisory') return 5;
+  // NWS tags Freeze Watch and Freeze Warning with the same CAP severity
+  // ("Severe"), so the fallback tied them and a watch could take the banner
+  // over a warning. Warnings keep the severe-fallback rank they always had;
+  // watches drop below SPS.
+  if (ev === 'hard freeze warning') return 13;
+  if (ev === 'freeze warning') return 12;
+  if (ev === 'hard freeze watch') return 8;
+  if (ev === 'freeze watch') return 7;
 
   const sev = (props.severity || '').toLowerCase();
   if (sev === 'extreme') return 18;
