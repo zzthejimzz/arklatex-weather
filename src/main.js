@@ -49,6 +49,7 @@ import { createObservationsSource } from './data/observations.js';
 import { createDirector } from './director/director.js';
 import { createLiveSource } from './data/alerts.js';
 import { heatAlert } from './data/heat.js';
+import { freezeAlert } from './data/freeze.js';
 import { createReportsSource, pickTourReports } from './data/reports.js';
 import { createMcdSource, createMcdReplaySource, pickTourMcds } from './data/mcd.js';
 import { createReplaySource } from './data/replay.js';
@@ -722,6 +723,15 @@ async function boot() {
       : 'Extreme Heat Warning';
     const heat = heatAlert([{ props: { event } }]);
     setTimeout(() => forecastPanel.showHeat(heat), 2_500);
+  }
+  if (params.has('freeze')) {
+    // Dev-only: ?freeze forces the freeze-safety page, same idea as ?heat:
+    // ?freeze (hard freeze warning) / ?freeze=warning / ?freeze=watch.
+    const event = params.get('freeze') === 'warning' ? 'Freeze Warning'
+      : params.get('freeze') === 'watch' ? 'Freeze Watch'
+      : 'Hard Freeze Warning';
+    const freeze = freezeAlert([{ props: { event } }]);
+    setTimeout(() => forecastPanel.showFreeze(freeze), 2_500);
   }
   if (params.has('moon')) {
     // ?moon forces the moon-phases page — computed locally, nothing to wait

@@ -46,9 +46,52 @@ export function createWarningsYtdLayer(map, zones) {
   // a chip covers; re-checked whenever the camera settles, since the label
   // layer re-culls itself on zoom.
   const cityLabels = () => map.getPane('cities')?.querySelectorAll('.city-label') ?? [];
+
+  // Neighboring counties can both make the top three (Caddo and Bossier
+  // usually go 1-2), and at region zoom their centers sit closer together
+  // than a chip is wide. Pull overlapping chips apart along whichever axis
+  // needs the smaller push, splitting it between the pair so each stays as
+  // close to its own county as it can. Measured once, solved in JS, then
+  // written back via `translate` (stacks with the chip's centering transform).
+  const CHIP_GAP = 6;
+  function separateChips(els) {
+    for (const el of els) el.style.translate = '';
+    const boxes = els.map(el => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left, y: r.top, w: r.width, h: r.height, dx: 0, dy: 0 };
+    });
+    for (let iter = 0; iter < 20; iter++) {
+      let moved = false;
+      for (let i = 0; i < boxes.length; i++) {
+        for (let j = i + 1; j < boxes.length; j++) {
+          const a = boxes[i], b = boxes[j];
+          const ax = a.x + a.dx + a.w / 2, ay = a.y + a.dy + a.h / 2;
+          const bx = b.x + b.dx + b.w / 2, by = b.y + b.dy + b.h / 2;
+          const ox = (a.w + b.w) / 2 + CHIP_GAP - Math.abs(ax - bx);
+          const oy = (a.h + b.h) / 2 + CHIP_GAP - Math.abs(ay - by);
+          if (ox <= 0 || oy <= 0) continue;
+          moved = true;
+          if (ox < oy) {
+            const s = (bx >= ax ? 1 : -1) * ox / 2;
+            a.dx -= s; b.dx += s;
+          } else {
+            const s = (by >= ay ? 1 : -1) * oy / 2;
+            a.dy -= s; b.dy += s;
+          }
+        }
+      }
+      if (!moved) break;
+    }
+    els.forEach((el, i) => {
+      const { dx, dy } = boxes[i];
+      if (dx || dy) el.style.translate = `${Math.round(dx)}px ${Math.round(dy)}px`;
+    });
+  }
+
   function declutter() {
-    const chips = [...(map.getPane('temps')?.querySelectorAll('.ytd-chip') ?? [])]
-      .map(el => el.getBoundingClientRect());
+    const chipEls = [...(map.getPane('temps')?.querySelectorAll('.ytd-chip') ?? [])];
+    separateChips(chipEls);
+    const chips = chipEls.map(el => el.getBoundingClientRect());
     const range = document.createRange();
     for (const label of cityLabels()) {
       // The label box itself is zero-width (text overflows a 0×0 anchor), so

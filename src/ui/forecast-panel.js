@@ -475,6 +475,55 @@ export function createForecastPanel({ root, map, forecasts }) {
     return true;
   }
 
+  // Freeze-safety page — the cold-season twin of showHeat, while a freeze /
+  // hard freeze warning or watch is in effect (freeze.js picks the top
+  // product). Tips follow the NWS "protect the four P's" messaging: people,
+  // pets, pipes, plants — plus the space-heater/CO warnings that come with
+  // every hard freeze. Reuses the heat card's layout classes.
+  function showFreeze(freeze) {
+    if (!freeze) return false;
+    const TIER_LABEL = {
+      'hard-warning': 'Warning — 28°F or colder expected',
+      warning: 'Warning — 32°F or colder expected',
+      'hard-watch': 'Watch — hard freeze possible',
+      watch: 'Watch — freezing temps possible',
+    };
+    const tips = [
+      { icon: 'drop', text: 'Let faucets drip and open cabinet doors under sinks to keep pipes from bursting.' },
+      { icon: 'freeze', text: 'Wrap exposed pipes, disconnect garden hoses, and cover outdoor faucets.' },
+      { icon: 'paw', text: 'Bring pets inside — give livestock shelter and water that won\'t freeze.' },
+      { icon: 'sprout', text: 'Cover tender plants or bring potted ones indoors before sunset.' },
+      { icon: 'population', text: 'Check on elderly relatives, neighbors, and anyone without reliable heat.' },
+      { icon: 'fire', text: 'Keep space heaters 3 feet from anything that can burn — never leave one running unattended.' },
+    ];
+    const { color } = freeze;
+    const area = freeze.count > 1 ? `${freeze.count} areas under this alert` : 'In effect for the ArkLaTex';
+    const tipRow = t => `
+      <div class="heat-tip">
+        <span class="ht-ico" style="color:${color}">${icon(t.icon)}</span>
+        <span class="ht-text">${t.text}</span>
+      </div>`;
+    root.innerHTML = `
+      <div class="fc-head">
+        <div class="fc-title">${icon('freeze')} Freeze <span class="grad">Safety</span></div>
+        <div class="fc-sub">${area} · National Weather Service</div>
+      </div>
+      <div class="alm-now heat-now" style="border-color:${color}66">
+        <div class="an-label">${freeze.event}</div>
+        <div class="an-read">
+          <span class="an-pill" style="color:${color};background:${color}1f;border-color:${color}66">${TIER_LABEL[freeze.tier]}</span>
+        </div>
+      </div>
+      <div class="alm-sec">Protect People, Pets, Pipes &amp; Plants</div>
+      <div class="heat-tips">${tips.map(tipRow).join('')}</div>
+      <div class="frost-tip heat-illness">${icon('warning')} Never heat your home with a gas oven, grill, or generator — carbon monoxide kills. Call <b>911</b> for hypothermia: intense shivering, confusion, slurred speech, or drowsiness.</div>`;
+    stage.classList.add('forecast-open');
+    root.classList.add('open');
+    map.invalidateSize({ animate: false });
+    open = true;
+    return true;
+  }
+
   // Year-to-date warnings & watches, from the IEM VTEC archive
   // (data/warnings-ytd.js): a hero total with last year's pace, one tile per
   // hazard, the season's shape by month, and three standout facts. The map
@@ -723,5 +772,5 @@ export function createForecastPanel({ root, map, forecasts }) {
     map.invalidateSize({ animate: false });
   }
 
-  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showWarningsYtd, showMoon, showSun, showEclipse, hide, ready };
+  return { show, showCity, showAlmanac, showFrost, showUv, showAqi, showPollen, showAurora, showHeat, showFreeze, showWarningsYtd, showMoon, showSun, showEclipse, hide, ready };
 }

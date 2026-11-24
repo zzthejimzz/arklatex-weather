@@ -85,6 +85,7 @@ export const ICONS = {
   // Dry/cracked mark below the waterline.
   'river-low': `<svg ${U}><path class="river-drop" d="M12 2.5c-3.5 4.7-6 8.2-6 11.3a6 6 0 0 0 12 0c0-3.1-2.5-6.6-6-11.3Z" fill="currentColor" fill-opacity=".08"/><path d="m8.7 16 2-2.2 1.6 1.8 2-2.7 1.2 1.5" stroke-width="1.7"/></svg>`,
   // Empty drop — watching, not yet flooding (also the plain water-drop mark).
+  paw: `<svg ${U}><circle cx="5.5" cy="10" r="2"/><circle cx="9.5" cy="5.5" r="2"/><circle cx="14.5" cy="5.5" r="2"/><circle cx="18.5" cy="10" r="2"/><path class="ui-fill" d="M12 12.2c-2.8 0-6.2 4.3-6.2 6.9 0 1.6 1.2 2.4 2.8 2.4 1.4 0 2.2-.7 3.4-.7s2 .7 3.4.7c1.6 0 2.8-.8 2.8-2.4 0-2.6-3.4-6.9-6.2-6.9Z" fill="currentColor" fill-opacity=".12"/></svg>`,
   drop: `<svg ${U}><path class="river-drop" d="M12 2.5c-3.5 4.7-6 8.2-6 11.3a6 6 0 0 0 12 0c0-3.1-2.5-6.6-6-11.3Z" fill="currentColor" fill-opacity=".12"/><path d="M9 16.5c1.7 1.2 4.3 1.2 6 0" opacity=".55"/></svg>`,
   'river-minor': `<svg ${U}><path class="river-drop" d="M12 2.5c-3.5 4.7-6 8.2-6 11.3a6 6 0 0 0 12 0c0-3.1-2.5-6.6-6-11.3Z" fill="currentColor" fill-opacity=".14"/><path class="river-band" d="M7 15.5c3.3 1.5 6.7 1.5 10 0" stroke-width="2.2"/></svg>`,
   'river-moderate': `<svg ${U}><path class="river-drop" d="M12 2.5c-3.5 4.7-6 8.2-6 11.3a6 6 0 0 0 12 0c0-3.1-2.5-6.6-6-11.3Z" fill="currentColor" fill-opacity=".2"/><path class="river-band" d="M7 16.5c3.3 1.3 6.7 1.3 10 0M8 13c2.7 1.1 5.3 1.1 8 0" stroke-width="2"/></svg>`,

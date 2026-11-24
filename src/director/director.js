@@ -44,6 +44,7 @@ import { dewColor } from '../map/temps-layer.js';
 import { dewLabel } from '../utils/dewpoint.js';
 import { formatDate } from '../utils/time.js';
 import { heatAlert } from '../data/heat.js';
+import { freezeAlert } from '../data/freeze.js';
 import { icon } from '../ui/icons.js';
 
 const TOUR_DWELL_MS = 25_000;
@@ -414,6 +415,9 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
     // this single stop; a warning also gets woven through the lap below.
     const heat = heatAlert(active);
     if (heat) plan.push({ type: 'heat', dwell: busy ? 16_000 : 22_000 });
+    // Freeze safety — the cold-season twin: one stop a lap while a freeze /
+    // hard freeze warning or watch is in effect (pipes, pets, plants, people).
+    if (freezeAlert(active)) plan.push({ type: 'freeze', dwell: busy ? 16_000 : 22_000 });
     // Aurora / Kp-index outlook rides right behind frost — same panel,
     // national in scope (no locality gate). An actual G1+ storm is real news
     // any cycle; but this far south "all quiet" is the case ~99% of the
@@ -743,6 +747,21 @@ export function createDirector({ map, alertsLayer, outlookLayer, popup, forecast
         // held for the full dwell (not the default ~10 s) so viewers can place
         // the area while the tips are up.
         for (const key of heat.keys) alertsLayer.flash(key, FLY_MS + step.dwell);
+        dwellUntil = Date.now() + FLY_MS + step.dwell;
+        return;
+      }
+      case 'freeze': {
+        // Freeze-safety tips — same shot as 'heat', re-reading the live alerts
+        // in case the freeze expired since the plan was built.
+        touring = null;
+        popup.hide();
+        alertsLayer.highlight(null);
+        hideChip();
+        outlookLayer.show('day1');
+        const freeze = freezeAlert(active);
+        if (!freeze || !forecastPanel?.showFreeze(freeze)) return advance();
+        fly(regionBounds);
+        for (const key of freeze.keys) alertsLayer.flash(key, FLY_MS + step.dwell);
         dwellUntil = Date.now() + FLY_MS + step.dwell;
         return;
       }
