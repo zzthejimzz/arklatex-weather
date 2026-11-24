@@ -34,11 +34,9 @@ const WATER = '#191919';
 
 const BASE_RECOLOR = {
   background: LAND,
-  park: '#565c56',
   water: WATER,
   waterway: WATER,
   landuse_residential: '#626262', // urban footprint slightly lighter — towns read as blobs
-  landcover_wood: '#515751',
   'aeroway-taxiway': '#4a4a4a',
   'aeroway-runway': '#4a4a4a',
   'aeroway-area': '#4f4f4f',
@@ -57,9 +55,14 @@ const BASE_RECOLOR = {
 
 // Positron layers that don't belong on a broadcast weather map: building
 // footprints, foot paths, railways, road casings (roads render as single
-// dark lines on grey), glaciers, disputed borders.
+// dark lines on grey), landcover + parks, disputed borders. Parks/woods used
+// to get a faintly green grey, but OpenMapTiles' `park` layer includes the
+// Oklahoma tribal nations (as nature_reserve) and the Ouachita/Ozark national
+// forests — on wide shots that read as a green wash over OK/AR that viewers
+// took for outlook/radar color. Flat land grey instead, and fewer fills for
+// SwiftShader.
 const BASE_DROP =
-  /^(building|highway_path|railway|.*_casing$|landcover_ice_shelf|landcover_glacier|boundary_disputed)/;
+  /^(building|highway_path|railway|.*_casing$|landcover|park|boundary_disputed)/;
 
 // ---- label styling ----------------------------------------------------------
 const TEXT_SCALE = 1.25; // broadcast legibility at 1080p
@@ -137,7 +140,7 @@ function buildBaseStyle(style) {
       else if (layer.type === 'fill') layer.paint['fill-color'] = color;
       else if (layer.type === 'line') layer.paint['line-color'] = color;
     }
-    // Arm the settle fade-in (roads are lines; landuse/park are fills).
+    // Arm the settle fade-in (roads are lines; landuse is a fill).
     if (layer.type === 'line') layer.paint['line-opacity-transition'] = { duration: FADE_MS, delay: 0 };
     else if (layer.type === 'fill') layer.paint['fill-opacity-transition'] = { duration: FADE_MS, delay: 0 };
     // boundary_3 ships as admin_level 3–6, which includes state lines we
